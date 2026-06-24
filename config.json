@@ -1,0 +1,11 @@
+{
+  "ip": "192.168.50.37",
+  "port": 8080,
+  "targetUrl": "http://192.168.50.238:3000/hoekens-anchor-alarm/",
+  "tile": {
+    "source": "mfd-embedder",
+    "featureName": "Anchor Alarm",
+    "name": "Anchor Alarm",
+    "description": "Hoeken's Anchor Alarm"
+  }
+}
