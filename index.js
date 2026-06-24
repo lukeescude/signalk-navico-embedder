@@ -211,7 +211,7 @@ const server = http.createServer((req, res) => {
   req.pipe(proxyReq);
 });
 
-// Forward WebSocket connections (anchor alarm may use these for live data)
+// Forward WebSocket upgrade requests to the target
 server.on('upgrade', (req, socket, head) => {
   const wsHeaders = {};
   for (const [k, v] of Object.entries(req.headers)) {

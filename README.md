@@ -1,8 +1,6 @@
-# mfd-embedder
+# signalk-navico-embedder
 
 A Node.js proxy that presents any web app as a webapp tile on B&G/Navico marine MFDs (Zeus, Vulcan, etc.). It handles the UDP multicast announcement protocol the MFD expects, and works around the significant browser limitations of the MFD's embedded Chromium.
-
-Please note this project is quite opinionated towards Hoeken's Anchor Alarm, and may not work with other web apps. I will try to eventually get around to designing this as a full cross-compatible proxy/embedder installable in SignalK.
 
 ## What it does
 
@@ -16,14 +14,14 @@ Edit `config.json`:
 
 ```json
 {
-  "ip": "192.168.50.37",
+  "ip": "192.168.1.10",
   "port": 8080,
-  "targetUrl": "http://192.168.50.238:3000/hoekens-anchor-alarm/",
+  "targetUrl": "http://192.168.1.20:3000/my-app/",
   "tile": {
     "source": "mfd-embedder",
-    "featureName": "Anchor Alarm",
-    "name": "Anchor Alarm",
-    "description": "Hoeken's Anchor Alarm"
+    "featureName": "My App",
+    "name": "My App",
+    "description": "My web app on the MFD"
   }
 }
 ```
@@ -54,16 +52,16 @@ Every 10 seconds this proxy sends a JSON payload to that group:
 {
   "Version": "1",
   "Source": "mfd-embedder",
-  "IP": "192.168.50.37",
-  "FeatureName": "Anchor Alarm",
-  "Text": [{ "Language": "en", "Name": "Anchor Alarm", "Description": "..." }],
-  "Icon": "http://192.168.50.37:8080/hoekens-anchor-alarm/",
-  "URL": "http://192.168.50.37:8080/hoekens-anchor-alarm/",
+  "IP": "192.168.1.10",
+  "FeatureName": "My App",
+  "Text": [{ "Language": "en", "Name": "My App", "Description": "My web app on the MFD" }],
+  "Icon": "http://192.168.1.10:8080/icon.png",
+  "URL": "http://192.168.1.10:8080/my-app/",
   "OnlyShowOnClientIP": "true",
   "BrowserPanel": {
     "Enable": true,
     "ProgressBarEnable": true,
-    "MenuText": [{ "Language": "en", "Name": "Anchor Alarm" }]
+    "MenuText": [{ "Language": "en", "Name": "My App" }]
   }
 }
 ```
@@ -142,7 +140,7 @@ Error observed: Uncaught TypeError: Object.fromEntries is not a function @ asset
 
 ### WebSocket support
 
-WebSocket itself is supported. The app (Hoeken's Anchor Alarm) uses `window.location.hostname` and `window.location.port` to construct its WebSocket URL, so it correctly connects through the proxy. The proxy forwards WebSocket upgrade requests to the target.
+WebSocket itself is supported. The proxy forwards WebSocket upgrade requests to the target transparently. Apps that construct their WebSocket URL from `window.location.hostname` and `window.location.port` will connect through the proxy automatically.
 
 ### `<script type="module">` support
 
@@ -168,4 +166,4 @@ During development, a diagnostic script was injected alongside the polyfills tha
 ## Reference
 
 - [signalk-mfd-plugin](https://github.com/htool/signalk-mfd-plugin) — source of the UDP multicast protocol details
-- [hoekens-anchor-alarm](https://github.com/hoeken/hoekens-anchor-alarm) — the target app used during development; a Vite/Svelte SignalK webapp
+- [hoekens-anchor-alarm](https://github.com/hoeken/hoekens-anchor-alarm) — a Vite/Svelte SignalK webapp; the app this proxy was originally developed against
