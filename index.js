@@ -107,7 +107,7 @@ function getLocalIp() {
   return '127.0.0.1';
 }
 
-module.exports = function(app) {
+module.exports = function (app) {
   let server = null;
   let publishInterval = null;
 
@@ -166,8 +166,13 @@ module.exports = function(app) {
         { file: 'icon.ico', route: '/icon.ico', mime: 'image/x-icon' },
         { file: 'icon.png', route: '/icon.png', mime: 'image/png' },
       ];
-      const activeIcon = ICONS.find(i => {
-        try { require('fs').accessSync(path.join(__dirname, i.file)); return true; } catch { return false; }
+      const activeIcon = ICONS.find((i) => {
+        try {
+          require('fs').accessSync(path.join(__dirname, i.file));
+          return true;
+        } catch {
+          return false;
+        }
       });
       const iconUrl = activeIcon ? `${serverUrl}${activeIcon.route}` : tileUrl;
 
@@ -243,7 +248,7 @@ module.exports = function(app) {
 
           if (contentType.includes('text/html')) {
             const chunks = [];
-            proxyRes.on('data', chunk => chunks.push(chunk));
+            proxyRes.on('data', (chunk) => chunks.push(chunk));
             proxyRes.on('end', () => {
               let body = Buffer.concat(chunks).toString('utf8');
               body = body.replace('</head>', POLYFILLS_SCRIPT + '\n</head>');
@@ -253,7 +258,7 @@ module.exports = function(app) {
             });
           } else if (contentType.includes('javascript')) {
             const chunks = [];
-            proxyRes.on('data', chunk => chunks.push(chunk));
+            proxyRes.on('data', (chunk) => chunks.push(chunk));
             proxyRes.on('end', async () => {
               const source = Buffer.concat(chunks).toString('utf8');
               try {
@@ -286,7 +291,7 @@ module.exports = function(app) {
         req.pipe(proxyReq);
       });
 
-      server.on('upgrade', (req, socket, head) => {
+      server.on('upgrade', (req, socket) => {
         const wsHeaders = {};
         for (const [k, v] of Object.entries(req.headers)) {
           if (!STRIP_REQUEST_HEADERS.has(k.toLowerCase())) {

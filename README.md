@@ -21,29 +21,32 @@ Then restart the SignalK server and enable the plugin in **Server → Plugin Con
 
 ## Configuration
 
-| Field | Required | Description |
-|---|---|---|
-| Target URL | Yes | Full URL of the web app to proxy (e.g. `http://localhost:3000/app/`) |
-| Proxy port | Yes | HTTP port this proxy listens on (default: `8080`) |
-| Tile name | No | Name shown on the MFD tile |
-| Tile description | No | Description shown on the MFD tile |
-| Local IP override | No | Leave blank to auto-detect. Set if the machine has multiple network interfaces. |
+| Field             | Required | Description                                                                     |
+| ----------------- | -------- | ------------------------------------------------------------------------------- |
+| Target URL        | Yes      | Full URL of the web app to proxy (e.g. `http://localhost:3000/app/`)            |
+| Proxy port        | Yes      | HTTP port this proxy listens on (default: `8080`)                               |
+| Tile name         | No       | Name shown on the MFD tile                                                      |
+| Tile description  | No       | Description shown on the MFD tile                                               |
+| Local IP override | No       | Leave blank to auto-detect. Set if the machine has multiple network interfaces. |
 
 ## How the B&G/Navico MFD webapp tile protocol works
 
 Discovered by reverse-engineering [signalk-mfd-plugin](https://github.com/htool/signalk-mfd-plugin).
 
 The MFD listens for **UDP multicast packets** on:
+
 - **Multicast group:** `239.2.1.1`
 - **Port:** `2053`
 
 Every 10 seconds this plugin sends a JSON payload to that group advertising the proxy URL. The MFD opens that URL in its browser panel when the tile is tapped.
 
 Key rules:
+
 - The **`IP` field must exactly match the source IP the UDP socket is bound to**. The MFD validates this.
 - The MFD must be connected via **wired Ethernet** (not Wi-Fi) to receive these announcements.
 
 The MFD also appends query parameters to the URL when launching the tile, e.g.:
+
 ```
 ?mfd_name=NavStation&mfd_model_detail=Zeus3S%2012&lang=en&mode=day&brand=B%26G
 ```
@@ -82,30 +85,30 @@ Modern JavaScript build tools output ES2020+ syntax. The MFD's Chromium doesn't 
 
 These APIs are polyfilled by injecting a `<script>` into every HTML response:
 
-| API | Minimum Chrome |
-|---|---|
-| `Object.fromEntries` | 73 |
-| `Array.prototype.flat` / `flatMap` | 69 |
-| `Array.prototype.at` | 92 |
-| `String.prototype.at` | 92 |
-| `String.prototype.replaceAll` | 85 |
-| `Object.hasOwn` | 93 |
-| `Promise.allSettled` | 76 |
-| `globalThis` | 71 |
-| `queueMicrotask` | 71 |
+| API                                | Minimum Chrome |
+| ---------------------------------- | -------------- |
+| `Object.fromEntries`               | 73             |
+| `Array.prototype.flat` / `flatMap` | 69             |
+| `Array.prototype.at`               | 92             |
+| `String.prototype.at`              | 92             |
+| `String.prototype.replaceAll`      | 85             |
+| `Object.hasOwn`                    | 93             |
+| `Promise.allSettled`               | 76             |
+| `globalThis`                       | 71             |
+| `queueMicrotask`                   | 71             |
 
 ## Proxy behaviour summary
 
-| Request/Response | What the proxy does |
-|---|---|
-| Conditional cache headers in request | Stripped — prevents spurious 304s |
-| `Accept-Encoding` in request | Stripped — ensures uncompressed responses |
-| `X-Frame-Options` in response | Stripped |
-| `Content-Security-Policy` in response | Stripped |
-| `Location` redirect headers | Rewritten from target origin to proxy origin |
-| HTML responses | Polyfill `<script>` injected before `</head>` |
-| JavaScript responses | Transpiled via esbuild to `chrome70` target |
-| WebSocket upgrades | Forwarded transparently to target |
+| Request/Response                      | What the proxy does                           |
+| ------------------------------------- | --------------------------------------------- |
+| Conditional cache headers in request  | Stripped — prevents spurious 304s             |
+| `Accept-Encoding` in request          | Stripped — ensures uncompressed responses     |
+| `X-Frame-Options` in response         | Stripped                                      |
+| `Content-Security-Policy` in response | Stripped                                      |
+| `Location` redirect headers           | Rewritten from target origin to proxy origin  |
+| HTML responses                        | Polyfill `<script>` injected before `</head>` |
+| JavaScript responses                  | Transpiled via esbuild to `chrome70` target   |
+| WebSocket upgrades                    | Forwarded transparently to target             |
 
 ## Reference
 

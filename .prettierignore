@@ -1,0 +1,7 @@
+node_modules
+package-lock.json
+
+# JS is owned by ESLint / @stylistic
+*.js
+*.cjs
+*.mjs

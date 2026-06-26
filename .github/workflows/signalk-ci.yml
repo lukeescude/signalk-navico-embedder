@@ -1,0 +1,11 @@
+name: SignalK Plugin CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    uses: SignalK/signalk-server/.github/workflows/plugin-ci.yml@master
+    with:
+      format-check-command: 'npm run format:check'

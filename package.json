@@ -3,6 +3,24 @@
   "version": "1.0.0",
   "description": "Embeds a URL as a webapp tile on B&G/Navico MFDs via UDP multicast announcement",
   "main": "index.js",
+  "scripts": {
+    "release": "git tag -d v$npm_package_version; git tag v$npm_package_version && git push && git push origin v$npm_package_version",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "format": "eslint --fix . && prettier --write .",
+    "format:check": "eslint . && prettier --check .",
+    "prepare": "husky || true"
+  },
+  "files": [
+    "index.js",
+    "icon.png",
+    "icon.ico",
+    "CHANGELOG.md"
+  ],
+  "lint-staged": {
+    "*.js": "eslint --fix",
+    "*.{json,css,html}": "prettier --write"
+  },
   "keywords": [
     "signalk-node-server-plugin",
     "signalk-category-utility",
@@ -12,13 +30,32 @@
     "navico"
   ],
   "author": "Luke Escude",
+  "contributors": [
+    "Zach Hoeken <hoeken@gmail.com>"
+  ],
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20.19"
+  },
   "signalk": {
     "displayName": "Navico MFD Embedder",
     "appIcon": "./icon.png"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lukeescude/signalk-navico-embedder.git"
+  },
   "dependencies": {
     "esbuild": "^0.24.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "eslint": "^10.4.0",
+    "globals": "^17.6.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.3"
   }
 }
