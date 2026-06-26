@@ -1,0 +1,3 @@
+# Force LF line endings on all platforms so Prettier's endOfLine: lf
+# check passes on Windows CI runners (which check out with autocrlf=true).
+* text=auto eol=lf
