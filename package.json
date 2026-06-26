@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "release": "git tag -d v$npm_package_version; git tag v$npm_package_version && git push && git push origin v$npm_package_version",
+    "build:config": "webpack",
+    "prepublishOnly": "webpack",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "format": "eslint --fix . && prettier --write .",
@@ -15,6 +17,7 @@
     "index.js",
     "icon.png",
     "icon.ico",
+    "public",
     "CHANGELOG.md"
   ],
   "lint-staged": {
@@ -23,6 +26,8 @@
   },
   "keywords": [
     "signalk-node-server-plugin",
+    "signalk-webapp",
+    "signalk-plugin-configurator",
     "signalk-category-utility",
     "marine",
     "mfd",
@@ -50,12 +55,19 @@
     "esbuild": "^0.24.0"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-react": "^7.28.5",
     "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.10.0",
+    "babel-loader": "^10.1.1",
     "eslint": "^10.4.0",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
-    "prettier": "^3.8.3"
+    "prettier": "^3.8.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "webpack": "^5.105.4",
+    "webpack-cli": "^7.0.2"
   }
 }

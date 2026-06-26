@@ -1,12 +1,14 @@
 # signalk-navico-embedder
 
-A SignalK plugin that presents any web app as a webapp tile on B&G/Navico marine MFDs (Zeus, Vulcan, etc.). It handles the UDP multicast announcement protocol the MFD expects, and works around the significant browser limitations of the MFD's embedded Chromium.
+A SignalK plugin that presents your installed Signal K web apps as webapp tiles on B&G/Navico marine MFDs (Zeus, Vulcan, etc.). It handles the UDP multicast announcement protocol the MFD expects, and works around the significant browser limitations of the MFD's embedded Chromium.
 
 ## What it does
 
-1. Runs an HTTP reverse proxy that forwards requests to a configurable target URL
-2. Broadcasts UDP multicast announcements that tell the MFD to show a tile for the proxy URL
+1. Runs an HTTP reverse proxy that forwards requests to the local Signal K server
+2. Broadcasts UDP multicast announcements that tell the MFD to show a tile for each selected web app
 3. Patches the proxied HTML and JS to be compatible with the MFD's old Chromium browser
+
+The embedded configurator can **auto-detect installed Signal K webapps**, so you just click _Discover_ and enable the ones you want on the MFD.
 
 ## Installation
 
@@ -21,13 +23,23 @@ Then restart the SignalK server and enable the plugin in **Server → Plugin Con
 
 ## Configuration
 
-| Field             | Required | Description                                                                     |
-| ----------------- | -------- | ------------------------------------------------------------------------------- |
-| Target URL        | Yes      | Full URL of the web app to proxy (e.g. `http://localhost:3000/app/`)            |
-| Proxy port        | Yes      | HTTP port this proxy listens on (default: `8080`)                               |
-| Tile name         | No       | Name shown on the MFD tile                                                      |
-| Tile description  | No       | Description shown on the MFD tile                                               |
-| Local IP override | No       | Leave blank to auto-detect. Set if the machine has multiple network interfaces. |
+Open **Server → Plugin Config → Navico MFD Embedder**. The plugin ships an embedded
+configurator that replaces the generic settings form:
+
+1. **Local IP address override** — leave blank to auto-detect. Set this if the machine has multiple network interfaces and the wrong one is selected.
+2. **Proxy port** — the HTTP port this proxy listens on (default: `8080`).
+3. **Discover Installed Webapps** — scans the Signal K server for installed web apps and adds any new ones to the list below.
+4. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
+   - drag to reorder,
+   - edit the **name**, **description**, and **icon** shown on the tile,
+   - toggle **enabled** (disabled apps are kept in the list but not announced),
+   - **remove** it entirely.
+
+Click **Save Configuration** to apply; the plugin restarts and re-announces the
+enabled tiles.
+
+Every enabled app is announced to the MFD as `http://<ip>:<port><app-path>`, and the
+proxy forwards that path to the local Signal K server.
 
 ## How the B&G/Navico MFD webapp tile protocol works
 
@@ -109,6 +121,19 @@ These APIs are polyfilled by injecting a `<script>` into every HTML response:
 | HTML responses                        | Polyfill `<script>` injected before `</head>` |
 | JavaScript responses                  | Transpiled via esbuild to `chrome70` target   |
 | WebSocket upgrades                    | Forwarded transparently to target             |
+
+## Development
+
+The embedded configurator is a React 19 component in [`src/configpanel/`](src/configpanel/),
+exposed to the Signal K admin UI via Webpack Module Federation. After editing it, rebuild
+the bundle into `public/` (which is auto-mounted and shipped with the package):
+
+```bash
+npm run build:config
+```
+
+The backend plugin ([`index.js`](index.js)) is plain CommonJS and needs no build step.
+`npm run prepublishOnly` rebuilds the configurator automatically before publishing.
 
 ## Reference
 

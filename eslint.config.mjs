@@ -3,7 +3,8 @@ import stylistic from '@stylistic/eslint-plugin';
 import globals from 'globals';
 
 export default [
-  { ignores: ['node_modules/'] },
+  // src/ is React/JSX built by webpack/babel; public/ holds webpack output.
+  { ignores: ['node_modules/', 'src/', 'public/'] },
   js.configs.recommended,
   stylistic.configs.customize({
     indent: 2,
