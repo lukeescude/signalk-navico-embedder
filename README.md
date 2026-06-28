@@ -59,6 +59,7 @@ In Signal K admin go to **Security** and toggle **Allow Read-Only Access**. This
 3. Save and restart the plugin.
 
 When a token is configured the proxy:
+
 - Adds `Authorization: Bearer <token>` to every forwarded HTTP request
 - Appends `?token=<token>` to every WebSocket upgrade URL
 - Injects `window.SK_TOKEN = "<token>"` into every HTML response so the webapp JS can authenticate its own fetch and WebSocket calls independently
@@ -135,17 +136,17 @@ These APIs are polyfilled by injecting a `<script>` into every HTML response:
 
 ## Proxy behaviour summary
 
-| Request/Response                      | What the proxy does                                                      |
-| ------------------------------------- | ------------------------------------------------------------------------ |
-| Conditional cache headers in request  | Stripped — prevents spurious 304s                                        |
-| `Accept-Encoding` in request          | Stripped — ensures uncompressed responses                                |
-| `X-Frame-Options` in response         | Stripped                                                                 |
-| `Content-Security-Policy` in response | Stripped                                                                 |
-| `Location` redirect headers           | Rewritten from target origin to proxy origin                             |
+| Request/Response                      | What the proxy does                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Conditional cache headers in request  | Stripped — prevents spurious 304s                                                        |
+| `Accept-Encoding` in request          | Stripped — ensures uncompressed responses                                                |
+| `X-Frame-Options` in response         | Stripped                                                                                 |
+| `Content-Security-Policy` in response | Stripped                                                                                 |
+| `Location` redirect headers           | Rewritten from target origin to proxy origin                                             |
 | HTML responses                        | Polyfill `<script>` injected before `</head>`; `window.SK_TOKEN` set if token configured |
-| JavaScript responses                  | Transpiled via esbuild to `chrome70` target                              |
-| WebSocket upgrades                    | Forwarded to target; `Authorization` header and `?token=` appended if token configured |
-| All HTTP requests (if token set)      | `Authorization: Bearer <token>` header added                             |
+| JavaScript responses                  | Transpiled via esbuild to `chrome70` target                                              |
+| WebSocket upgrades                    | Forwarded to target; `Authorization` header and `?token=` appended if token configured   |
+| All HTTP requests (if token set)      | `Authorization: Bearer <token>` header added                                             |
 
 ## Development
 
