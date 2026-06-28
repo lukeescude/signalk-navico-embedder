@@ -1,6 +1,6 @@
 {
   "name": "signalk-navico-embedder",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Embeds a URL as a webapp tile on B&G/Navico MFDs via UDP multicast announcement",
   "main": "index.js",
   "keywords": [
@@ -14,7 +14,7 @@
   "author": "Luke Escude",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lukeescude/signalk-navico-embedder"
+    "url": "git+https://github.com/lukeescude/signalk-navico-embedder.git"
   },
   "license": "ISC",
   "type": "commonjs",
