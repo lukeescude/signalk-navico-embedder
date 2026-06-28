@@ -1,3 +1,11 @@
+# v1.2.0
+
+- Signal K authentication token support: new `skToken` plugin config field accepts a JWT
+- When a token is set, injects `Authorization: Bearer <token>` into all forwarded HTTP requests
+- When a token is set, appends `?token=<token>` to WebSocket upgrade URLs (Signal K accepts this form)
+- When a token is set, injects `window.SK_TOKEN = "<token>"` into every HTML response so webapp JS can authenticate its own fetch/WebSocket calls independently
+- README: added Authentication section documenting Option A (read-only access) and Option B (token injection), and updated the proxy behaviour summary table
+
 # v1.1.0
 
 - Multi-app / multi-tile MFD announcements: replaced single-URL config with an `apps` array so multiple web apps can be announced as separate tiles on the MFD simultaneously

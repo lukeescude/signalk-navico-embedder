@@ -168,6 +168,11 @@ module.exports = function (app) {
           title: 'Signal K server port override',
           description: 'Leave blank to auto-detect (PORT env var, then the server\'s configured port, then 3000). Set this if the proxy cannot reach the Signal K server on the detected port.',
         },
+        skToken: {
+          type: 'string',
+          title: 'Signal K authentication token',
+          description: 'JWT token injected into all proxied requests. Required when Signal K has authentication enabled and read-only access disabled (e.g. MFDs that have no session cookie). Generate a token in Signal K admin → Security, or enable Allow Read-Only Access instead.',
+        },
         apps: {
           type: 'array',
           title: 'MFD Apps',
@@ -193,6 +198,7 @@ module.exports = function (app) {
       const ip = (options.ip && options.ip.trim()) || getLocalIp();
       const port = options.port || 8080;
       const serverPort = getServerPort(options);
+      const skToken = (options.skToken || '').trim();
 
       const serverUrl = `http://${ip}:${port}`;
       // Everything is proxied to the local Signal K server, which serves all webapps.
@@ -274,6 +280,7 @@ module.exports = function (app) {
           }
         }
         forwardHeaders.host = targetParsed.host;
+        if (skToken) forwardHeaders['authorization'] = 'Bearer ' + skToken;
 
         const reqOptions = {
           hostname: targetParsed.hostname,
@@ -302,7 +309,10 @@ module.exports = function (app) {
             proxyRes.on('data', (chunk) => chunks.push(chunk));
             proxyRes.on('end', () => {
               let body = Buffer.concat(chunks).toString('utf8');
-              body = body.replace('</head>', POLYFILLS_SCRIPT + '\n</head>');
+              const tokenScript = skToken
+                ? '<script>window.SK_TOKEN=' + JSON.stringify(skToken) + ';</script>\n'
+                : '';
+              body = body.replace('</head>', POLYFILLS_SCRIPT + '\n' + tokenScript + '</head>');
               delete headers['content-length'];
               res.writeHead(proxyRes.statusCode, headers);
               res.end(body);
@@ -350,11 +360,18 @@ module.exports = function (app) {
           }
         }
         wsHeaders.host = targetParsed.host;
+        if (skToken) wsHeaders['authorization'] = 'Bearer ' + skToken;
+
+        // Append token as query param — Signal K accepts ?token= on WebSocket URLs
+        let wsPath = req.url;
+        if (skToken) {
+          wsPath += (wsPath.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(skToken);
+        }
 
         const proxyReq = http.request({
           hostname: targetParsed.hostname,
           port: parseInt(targetParsed.port) || 80,
-          path: req.url,
+          path: wsPath,
           headers: wsHeaders,
         });
 
