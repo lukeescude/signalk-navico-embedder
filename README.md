@@ -1,12 +1,14 @@
 # signalk-navico-embedder
 
-A SignalK plugin that presents any web app as a webapp tile on B&G/Navico marine MFDs (Zeus, Vulcan, etc.). It handles the UDP multicast announcement protocol the MFD expects, and works around the significant browser limitations of the MFD's embedded Chromium.
+A SignalK plugin that presents your installed Signal K web apps as webapp tiles on B&G/Navico marine MFDs (Zeus, Vulcan, etc.). It handles the UDP multicast announcement protocol the MFD expects, and works around the significant browser limitations of the MFD's embedded Chromium.
 
 ## What it does
 
-1. Runs an HTTP reverse proxy that forwards requests to a configurable target URL
-2. Broadcasts UDP multicast announcements that tell the MFD to show a tile for the proxy URL
+1. Runs an HTTP reverse proxy that forwards requests to the local Signal K server
+2. Broadcasts UDP multicast announcements that tell the MFD to show a tile for each selected web app
 3. Patches the proxied HTML and JS to be compatible with the MFD's old Chromium browser
+
+The embedded configurator can **auto-detect installed Signal K webapps**, so you just click _Discover_ and enable the ones you want on the MFD.
 
 ## Installation
 
@@ -21,29 +23,42 @@ Then restart the SignalK server and enable the plugin in **Server → Plugin Con
 
 ## Configuration
 
-| Field | Required | Description |
-|---|---|---|
-| Target URL | Yes | Full URL of the web app to proxy (e.g. `http://localhost:3000/app/`) |
-| Proxy port | Yes | HTTP port this proxy listens on (default: `8080`) |
-| Tile name | No | Name shown on the MFD tile |
-| Tile description | No | Description shown on the MFD tile |
-| Local IP override | No | Leave blank to auto-detect. Set if the machine has multiple network interfaces. |
+Open **Server → Plugin Config → Navico MFD Embedder**. The plugin ships an embedded
+configurator that replaces the generic settings form:
+
+1. **Local IP address override** — leave blank to auto-detect. Set this if the machine has multiple network interfaces and the wrong one is selected.
+2. **Proxy port** — the HTTP port this proxy listens on (default: `8080`).
+3. **Discover Installed Webapps** — scans the Signal K server for installed web apps and adds any new ones to the list below.
+4. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
+   - drag to reorder,
+   - edit the **name**, **description**, and **icon** shown on the tile,
+   - toggle **enabled** (disabled apps are kept in the list but not announced),
+   - **remove** it entirely.
+
+Click **Save Configuration** to apply; the plugin restarts and re-announces the
+enabled tiles.
+
+Every enabled app is announced to the MFD as `http://<ip>:<port><app-path>`, and the
+proxy forwards that path to the local Signal K server.
 
 ## How the B&G/Navico MFD webapp tile protocol works
 
 Discovered by reverse-engineering [signalk-mfd-plugin](https://github.com/htool/signalk-mfd-plugin).
 
 The MFD listens for **UDP multicast packets** on:
+
 - **Multicast group:** `239.2.1.1`
 - **Port:** `2053`
 
 Every 10 seconds this plugin sends a JSON payload to that group advertising the proxy URL. The MFD opens that URL in its browser panel when the tile is tapped.
 
 Key rules:
+
 - The **`IP` field must exactly match the source IP the UDP socket is bound to**. The MFD validates this.
 - The MFD must be connected via **wired Ethernet** (not Wi-Fi) to receive these announcements.
 
 The MFD also appends query parameters to the URL when launching the tile, e.g.:
+
 ```
 ?mfd_name=NavStation&mfd_model_detail=Zeus3S%2012&lang=en&mode=day&brand=B%26G
 ```
@@ -82,30 +97,43 @@ Modern JavaScript build tools output ES2020+ syntax. The MFD's Chromium doesn't 
 
 These APIs are polyfilled by injecting a `<script>` into every HTML response:
 
-| API | Minimum Chrome |
-|---|---|
-| `Object.fromEntries` | 73 |
-| `Array.prototype.flat` / `flatMap` | 69 |
-| `Array.prototype.at` | 92 |
-| `String.prototype.at` | 92 |
-| `String.prototype.replaceAll` | 85 |
-| `Object.hasOwn` | 93 |
-| `Promise.allSettled` | 76 |
-| `globalThis` | 71 |
-| `queueMicrotask` | 71 |
+| API                                | Minimum Chrome |
+| ---------------------------------- | -------------- |
+| `Object.fromEntries`               | 73             |
+| `Array.prototype.flat` / `flatMap` | 69             |
+| `Array.prototype.at`               | 92             |
+| `String.prototype.at`              | 92             |
+| `String.prototype.replaceAll`      | 85             |
+| `Object.hasOwn`                    | 93             |
+| `Promise.allSettled`               | 76             |
+| `globalThis`                       | 71             |
+| `queueMicrotask`                   | 71             |
 
 ## Proxy behaviour summary
 
-| Request/Response | What the proxy does |
-|---|---|
-| Conditional cache headers in request | Stripped — prevents spurious 304s |
-| `Accept-Encoding` in request | Stripped — ensures uncompressed responses |
-| `X-Frame-Options` in response | Stripped |
-| `Content-Security-Policy` in response | Stripped |
-| `Location` redirect headers | Rewritten from target origin to proxy origin |
-| HTML responses | Polyfill `<script>` injected before `</head>` |
-| JavaScript responses | Transpiled via esbuild to `chrome70` target |
-| WebSocket upgrades | Forwarded transparently to target |
+| Request/Response                      | What the proxy does                           |
+| ------------------------------------- | --------------------------------------------- |
+| Conditional cache headers in request  | Stripped — prevents spurious 304s             |
+| `Accept-Encoding` in request          | Stripped — ensures uncompressed responses     |
+| `X-Frame-Options` in response         | Stripped                                      |
+| `Content-Security-Policy` in response | Stripped                                      |
+| `Location` redirect headers           | Rewritten from target origin to proxy origin  |
+| HTML responses                        | Polyfill `<script>` injected before `</head>` |
+| JavaScript responses                  | Transpiled via esbuild to `chrome70` target   |
+| WebSocket upgrades                    | Forwarded transparently to target             |
+
+## Development
+
+The embedded configurator is a React 19 component in [`src/configpanel/`](src/configpanel/),
+exposed to the Signal K admin UI via Webpack Module Federation. After editing it, rebuild
+the bundle into `public/` (which is auto-mounted and shipped with the package):
+
+```bash
+npm run build:config
+```
+
+The backend plugin ([`index.js`](index.js)) is plain CommonJS and needs no build step.
+`npm run prepublishOnly` rebuilds the configurator automatically before publishing.
 
 ## Reference
 

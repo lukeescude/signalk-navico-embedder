@@ -1,6 +1,4 @@
-# Changelog
-
-## 1.0.0
+# v1.0.0
 
 - Initial release as a SignalK plugin
 - HTTP reverse proxy that forwards requests to a configurable target URL

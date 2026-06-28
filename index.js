@@ -2,12 +2,16 @@ const http = require('http');
 const dgram = require('dgram');
 const os = require('os');
 const path = require('path');
-const url = require('url');
+const fs = require('fs');
 const esbuild = require('esbuild');
 
 const PUBLISH_PORT = 2053;
 const MULTICAST_GROUP = '239.2.1.1';
 const PUBLISH_INTERVAL = 10 * 1000;
+
+// Local route used to serve the plugin's bundled fallback icon for apps that
+// have no icon of their own. Namespaced so it cannot collide with a proxied path.
+const FALLBACK_ICON_ROUTE = '/__navico-embedder-icon';
 
 const STRIP_RESPONSE_HEADERS = new Set([
   'x-frame-options',
@@ -107,18 +111,46 @@ function getLocalIp() {
   return '127.0.0.1';
 }
 
-module.exports = function(app) {
+// The bundled fallback icon, resolved once at load time.
+const FALLBACK_ICON = [
+  { file: 'icon.ico', mime: 'image/x-icon' },
+  { file: 'icon.png', mime: 'image/png' },
+].find((i) => {
+  try {
+    fs.accessSync(path.join(__dirname, i.file));
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+module.exports = function (app) {
   let server = null;
   let publishInterval = null;
+
+  // Look up the local Signal K server's HTTP port; everything is proxied there.
+  // An explicit config override wins; otherwise mirror the server's own
+  // resolution order: PORT env var, then settings.port, then the 3000 default.
+  function getServerPort(options) {
+    if (options && options.serverPort) return options.serverPort;
+    return (
+      Number(process.env.PORT)
+      || (app.config && app.config.settings && app.config.settings.port)
+      || 3000
+    );
+  }
 
   return {
     id: 'signalk-navico-embedder',
     name: 'Navico MFD Embedder',
-    description: 'Embeds a URL as a webapp tile on B&G/Navico MFDs via UDP multicast announcement',
+    description: 'Embeds Signal K web apps as webapp tiles on B&G/Navico MFDs via UDP multicast announcement',
 
     schema: {
       type: 'object',
-      required: ['port', 'targetUrl'],
+      description:
+        'Configure this plugin from Server → Plugin Config. Use the embedded "Discover Installed Webapps" '
+        + 'button to auto-detect web apps, then enable the ones you want to appear as tiles on the MFD.',
+      required: [],
       properties: {
         ip: {
           type: 'string',
@@ -131,22 +163,28 @@ module.exports = function(app) {
           description: 'The HTTP port this proxy listens on.',
           default: 8080,
         },
-        targetUrl: {
-          type: 'string',
-          title: 'Target URL',
-          description: 'Full URL of the web app to proxy to the MFD (e.g. http://localhost:3000/app/).',
+        serverPort: {
+          type: 'number',
+          title: 'Signal K server port override',
+          description: 'Leave blank to auto-detect (PORT env var, then the server\'s configured port, then 3000). Set this if the proxy cannot reach the Signal K server on the detected port.',
         },
-        tileName: {
-          type: 'string',
-          title: 'Tile name',
-          description: 'Name shown on the MFD tile.',
-          default: 'My App',
-        },
-        tileDescription: {
-          type: 'string',
-          title: 'Tile description',
-          description: 'Description shown on the MFD tile.',
-          default: '',
+        apps: {
+          type: 'array',
+          title: 'MFD Apps',
+          description:
+            'Web apps to announce as tiles on the MFD. Installed webapps are added here automatically '
+            + 'by the Discover button. Reorder, disable, or override name/description as needed.',
+          default: [],
+          items: {
+            type: 'object',
+            required: ['url'],
+            properties: {
+              enabled: { type: 'boolean', title: 'Enabled', default: true },
+              url: { type: 'string', title: 'URL', description: 'Path of the web app (e.g. /@signalk/freeboard-sk/).' },
+              label: { type: 'string', title: 'Name', description: 'Name shown on the MFD tile.' },
+              description: { type: 'string', title: 'Description', description: 'Description shown on the MFD tile.' },
+            },
+          },
         },
       },
     },
@@ -154,59 +192,77 @@ module.exports = function(app) {
     start(options) {
       const ip = (options.ip && options.ip.trim()) || getLocalIp();
       const port = options.port || 8080;
-      const targetUrl = options.targetUrl;
-      const tileName = options.tileName || 'My App';
-      const tileDescription = options.tileDescription || '';
+      const serverPort = getServerPort(options);
 
       const serverUrl = `http://${ip}:${port}`;
-      const targetParsed = new url.URL(targetUrl);
-      const tileUrl = `${serverUrl}${targetParsed.pathname}`;
+      // Everything is proxied to the local Signal K server, which serves all webapps.
+      const targetParsed = new URL(`http://127.0.0.1:${serverPort}`);
 
-      const ICONS = [
-        { file: 'icon.ico', route: '/icon.ico', mime: 'image/x-icon' },
-        { file: 'icon.png', route: '/icon.png', mime: 'image/png' },
-      ];
-      const activeIcon = ICONS.find(i => {
-        try { require('fs').accessSync(path.join(__dirname, i.file)); return true; } catch { return false; }
-      });
-      const iconUrl = activeIcon ? `${serverUrl}${activeIcon.route}` : tileUrl;
+      const apps = (options.apps || [])
+        .filter((a) => a && a.enabled !== false && a.url)
+        .map((a) => {
+          const appPath = a.url.startsWith('/') ? a.url : `/${a.url}`;
+          const tileUrl = `${serverUrl}${appPath}`;
+          let iconUrl;
+          if (a.icon && /^https?:\/\//.test(a.icon)) {
+            iconUrl = a.icon;
+          } else if (a.icon) {
+            iconUrl = `${serverUrl}${a.icon.startsWith('/') ? a.icon : `/${a.icon}`}`;
+          } else if (FALLBACK_ICON) {
+            iconUrl = `${serverUrl}${FALLBACK_ICON_ROUTE}`;
+          } else {
+            iconUrl = tileUrl;
+          }
+          return {
+            label: a.label || appPath,
+            description: a.description || '',
+            tileUrl,
+            iconUrl,
+          };
+        });
 
-      const buildAnnouncement = () => JSON.stringify({
+      const buildAnnouncement = (app2) => JSON.stringify({
         Version: '1',
         Source: 'signalk-navico-embedder',
         IP: ip,
-        FeatureName: tileName,
-        Text: [{ Language: 'en', Name: tileName, Description: tileDescription }],
-        Icon: iconUrl,
-        URL: tileUrl,
+        FeatureName: app2.label,
+        Text: [{ Language: 'en', Name: app2.label, Description: app2.description }],
+        Icon: app2.iconUrl,
+        URL: app2.tileUrl,
         OnlyShowOnClientIP: 'true',
         BrowserPanel: {
           Enable: true,
           ProgressBarEnable: true,
-          MenuText: [{ Language: 'en', Name: tileName }],
+          MenuText: [{ Language: 'en', Name: app2.label }],
         },
       });
 
       const publish = () => {
-        const msg = buildAnnouncement();
+        if (apps.length === 0) return;
         const socket = dgram.createSocket('udp4');
         socket.once('listening', () => {
-          socket.send(msg, PUBLISH_PORT, MULTICAST_GROUP, (err) => {
-            socket.close();
-            if (err) {
-              app.error(`Multicast send error: ${err.message}`);
-            } else {
-              app.debug(`Announced tile "${tileName}" -> ${tileUrl}`);
-            }
-          });
+          let pending = apps.length;
+          const done = () => {
+            if (--pending <= 0) socket.close();
+          };
+          for (const app2 of apps) {
+            socket.send(buildAnnouncement(app2), PUBLISH_PORT, MULTICAST_GROUP, (err) => {
+              if (err) {
+                app.error(`Multicast send error: ${err.message}`);
+              } else {
+                app.debug(`Announced tile "${app2.label}" -> ${app2.tileUrl}`);
+              }
+              done();
+            });
+          }
         });
         socket.bind(PUBLISH_PORT, ip);
       };
 
       server = http.createServer((req, res) => {
-        if (activeIcon && req.url === activeIcon.route) {
-          const icon = require('fs').readFileSync(path.join(__dirname, activeIcon.file));
-          res.writeHead(200, { 'Content-Type': activeIcon.mime, 'Cache-Control': 'max-age=3600' });
+        if (FALLBACK_ICON && req.url === FALLBACK_ICON_ROUTE) {
+          const icon = fs.readFileSync(path.join(__dirname, FALLBACK_ICON.file));
+          res.writeHead(200, { 'Content-Type': FALLBACK_ICON.mime, 'Cache-Control': 'max-age=3600' });
           res.end(icon);
           return;
         }
@@ -219,7 +275,7 @@ module.exports = function(app) {
         }
         forwardHeaders.host = targetParsed.host;
 
-        const options = {
+        const reqOptions = {
           hostname: targetParsed.hostname,
           port: parseInt(targetParsed.port) || 80,
           path: req.url,
@@ -227,7 +283,7 @@ module.exports = function(app) {
           headers: forwardHeaders,
         };
 
-        const proxyReq = http.request(options, (proxyRes) => {
+        const proxyReq = http.request(reqOptions, (proxyRes) => {
           const headers = {};
           for (const [k, v] of Object.entries(proxyRes.headers)) {
             if (!STRIP_RESPONSE_HEADERS.has(k.toLowerCase())) {
@@ -243,7 +299,7 @@ module.exports = function(app) {
 
           if (contentType.includes('text/html')) {
             const chunks = [];
-            proxyRes.on('data', chunk => chunks.push(chunk));
+            proxyRes.on('data', (chunk) => chunks.push(chunk));
             proxyRes.on('end', () => {
               let body = Buffer.concat(chunks).toString('utf8');
               body = body.replace('</head>', POLYFILLS_SCRIPT + '\n</head>');
@@ -253,7 +309,7 @@ module.exports = function(app) {
             });
           } else if (contentType.includes('javascript')) {
             const chunks = [];
-            proxyRes.on('data', chunk => chunks.push(chunk));
+            proxyRes.on('data', (chunk) => chunks.push(chunk));
             proxyRes.on('end', async () => {
               const source = Buffer.concat(chunks).toString('utf8');
               try {
@@ -286,7 +342,7 @@ module.exports = function(app) {
         req.pipe(proxyReq);
       });
 
-      server.on('upgrade', (req, socket, head) => {
+      server.on('upgrade', (req, socket) => {
         const wsHeaders = {};
         for (const [k, v] of Object.entries(req.headers)) {
           if (!STRIP_REQUEST_HEADERS.has(k.toLowerCase())) {
@@ -320,9 +376,12 @@ module.exports = function(app) {
       });
 
       server.listen(port, '0.0.0.0', () => {
-        app.setPluginStatus(`Proxying ${targetUrl} -> MFD tile at ${tileUrl} (IP: ${ip})`);
-        app.debug(`Proxy listening on ${serverUrl}`);
-        app.debug(`Forwarding to ${targetParsed.origin}`);
+        if (apps.length === 0) {
+          app.setPluginStatus(`Proxy listening on ${serverUrl} — no apps configured yet (use Discover)`);
+        } else {
+          app.setPluginStatus(`Announcing ${apps.length} tile(s) to MFD via ${serverUrl} (IP: ${ip})`);
+        }
+        app.debug(`Proxy listening on ${serverUrl}, forwarding to ${targetParsed.origin}`);
       });
 
       publish();
