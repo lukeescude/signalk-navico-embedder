@@ -12,6 +12,10 @@
     "navico"
   ],
   "author": "Luke Escude",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lukeescude/signalk-navico-embedder"
+  },
   "license": "ISC",
   "type": "commonjs",
   "signalk": {
