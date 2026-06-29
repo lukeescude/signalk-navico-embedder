@@ -1,28 +1,305 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Navico MFD Embedder</title>
-    <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: #1a1a2e;
-        color: #e0e0e0;
-        padding: 32px;
-        line-height: 1.5;
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SignalK Webapps</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      margin: 0;
+      padding: 24px;
+      line-height: 1.5;
+    }
+
+    a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 0 0 24px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .subtitle {
+      color: #9aa0b4;
+      font-size: 13px;
+      margin: 0 0 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+    }
+
+    .tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 18px 12px;
+      background: #24243e;
+      border: 1px solid #33334d;
+      border-radius: 12px;
+      color: #e0e0e0;
+      text-align: center;
+      transition:
+        background 0.15s,
+        border-color 0.15s,
+        transform 0.1s;
+    }
+
+    .tile:hover,
+    .tile:focus {
+      background: #2e2e52;
+      border-color: #3b82f6;
+      outline: none;
+    }
+
+    .tile:active {
+      transform: scale(0.97);
+    }
+
+    .tile .icon {
+      width: 88px;
+      height: 88px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #3b3b5c;
+      overflow: hidden;
+      font-size: 34px;
+      font-weight: 600;
+      color: #cdd2e6;
+    }
+
+    .tile .icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 8px;
+    }
+
+    .tile .title {
+      font-size: 14px;
+      font-weight: 600;
+      word-break: break-word;
+    }
+
+    .message {
+      color: #9aa0b4;
+      font-size: 14px;
+      padding: 24px 0;
+    }
+
+    .message.error {
+      color: #f87171;
+    }
+
+    .debug {
+      margin-top: 40px;
+      border-top: 1px solid #33334d;
+      padding-top: 16px;
+    }
+
+    .debug h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #888;
+      margin: 0 0 12px;
+    }
+
+    .debug table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .debug th,
+    .debug td {
+      text-align: left;
+      vertical-align: top;
+      padding: 4px 8px;
+      border-bottom: 1px solid #2a2a44;
+      word-break: break-all;
+    }
+
+    .debug th {
+      color: #9aa0b4;
+      font-weight: 500;
+      width: 170px;
+      white-space: nowrap;
+    }
+
+    .debug td {
+      color: #d8dcea;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+  </style>
+</head>
+
+<body>
+  <h1 id="title" title="Click to toggle debug information">SignalK Webapps</h1>
+
+  <div id="apps" class="grid"></div>
+  <div id="message" class="message">Loading apps…</div>
+
+  <div id="debugSection" class="debug" style="display: none">
+    <h2>Debug information</h2>
+    <table id="debug"></table>
+  </div>
+
+  <!--
+      Conservative ES5-style script: this page is also served through the proxy to
+      the MFD's old embedded Chromium (Chrome ~60-72), so avoid optional chaining
+      (?.) and nullish coalescing (??). The proxy injects the runtime polyfills.
+    -->
+  <script>
+    (function () {
+      var WEBAPPS_URL =
+        '/signalk/v1/api/vessels/self/plugins/signalk-navico-embedder/webapps';
+
+      function initials(name) {
+        var s = (name || '??').replace(/^\//, '').trim();
+        return (s || '??').slice(0, 2).toUpperCase();
       }
-      a {
-        color: #3b82f6;
+
+      function makeTile(info) {
+        var a = document.createElement('a');
+        a.className = 'tile';
+        a.href = info.url || '#';
+        a.title = info.description || info.name || '';
+
+        var icon = document.createElement('div');
+        icon.className = 'icon';
+        if (info.icon) {
+          var img = document.createElement('img');
+          img.src = info.icon;
+          img.alt = info.name || '';
+          img.onerror = function () {
+            if (img.parentNode === icon) icon.removeChild(img);
+            icon.textContent = initials(info.name || info.url);
+          };
+          icon.appendChild(img);
+        } else {
+          icon.textContent = initials(info.name || info.url);
+        }
+
+        var title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = info.name || info.url || 'App';
+
+        a.appendChild(icon);
+        a.appendChild(title);
+        return a;
       }
-    </style>
-  </head>
-  <body>
-    <h1>Navico MFD Embedder</h1>
-    <p>
-      This plugin has no standalone UI. Configure it from
-      <a href="/admin/#/serverConfiguration/plugins/signalk-navico-embedder">Server → Plugin Config → Navico MFD Embedder</a>,
-      where the embedded configurator lets you discover installed webapps and choose which to announce as tiles on your MFD.
-    </p>
-  </body>
+
+      function setMessage(text, isError) {
+        var msg = document.getElementById('message');
+        msg.textContent = text;
+        msg.className = isError ? 'message error' : 'message';
+        msg.style.display = text ? '' : 'none';
+      }
+
+      function renderApps(list) {
+        var grid = document.getElementById('apps');
+        grid.innerHTML = '';
+        if (!list || list.length === 0) {
+          setMessage(
+            'No web apps are enabled. Add them in Server → Plugin Config → Navico MFD Embedder.',
+            false
+          );
+          return;
+        }
+        setMessage('', false);
+        for (var i = 0; i < list.length; i++) {
+          grid.appendChild(makeTile(list[i]));
+        }
+      }
+
+      function loadApps() {
+        fetch(WEBAPPS_URL, { headers: { Accept: 'application/json' } })
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            // The REST API wraps leaf values: { value: [...], timestamp, $source }.
+            var list = data;
+            if (data && !Array.isArray(data) && data.value) list = data.value;
+            if (!Array.isArray(list)) list = [];
+            renderApps(list);
+          })
+          .catch(function (err) {
+            setMessage('Could not load app list: ' + err.message, true);
+          });
+      }
+
+      function addRow(table, label, value) {
+        var tr = document.createElement('tr');
+        var th = document.createElement('th');
+        th.textContent = label;
+        var td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(th);
+        tr.appendChild(td);
+        table.appendChild(tr);
+      }
+
+      function renderDebug() {
+        var table = document.getElementById('debug');
+
+        addRow(table, 'User agent', navigator.userAgent);
+        addRow(table, 'Page URL', location.href);
+
+        var qs = location.search ? location.search.replace(/^\?/, '') : '(none)';
+        addRow(table, 'Query string', qs);
+        if (location.search && typeof URLSearchParams === 'function') {
+          var params = new URLSearchParams(location.search);
+          params.forEach(function (value, key) {
+            addRow(table, ' ' + key, value);
+          });
+        }
+
+        addRow(table, 'Referrer', document.referrer || '(none)');
+        addRow(table, 'Window size', window.innerWidth + ' × ' + window.innerHeight);
+        addRow(table, 'Screen size', screen.width + ' × ' + screen.height);
+        addRow(table, 'Device pixel ratio', String(window.devicePixelRatio || 1));
+        addRow(table, 'Language', navigator.language || '(unknown)');
+        addRow(table, 'Online', String(navigator.onLine));
+        addRow(table, 'Cookies enabled', String(navigator.cookieEnabled));
+      }
+
+      function setupDebugToggle() {
+        var title = document.getElementById('title');
+        var section = document.getElementById('debugSection');
+        title.addEventListener('click', function () {
+          section.style.display = section.style.display === 'none' ? '' : 'none';
+        });
+      }
+
+      renderDebug();
+      setupDebugToggle();
+      loadApps();
+    })();
+  </script>
+</body>
+
 </html>

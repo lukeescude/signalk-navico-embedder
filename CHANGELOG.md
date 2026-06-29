@@ -1,3 +1,9 @@
+# v1.3.0
+
+- Standalone app-chooser webapp at `/signalk-navico-embedder/`: shows every enabled web app in a grid of icon + title tiles, accessible to both logged-in and unauthenticated users
+- Publishes the enabled-app list (name, url, icon) as a delta to `plugins.signalk-navico-embedder.webapps` on startup, readable without authentication via `GET /signalk/v1/api/vessels/self/plugins/signalk-navico-embedder/webapps`
+- The chooser page shows debug information (user agent, query string and parsed params, window/screen size, etc.) to aid MFD troubleshooting
+
 # v1.2.0
 
 - Signal K authentication token support: new `skToken` plugin config field accepts a JWT

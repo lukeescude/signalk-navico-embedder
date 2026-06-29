@@ -204,28 +204,49 @@ module.exports = function (app) {
       // Everything is proxied to the local Signal K server, which serves all webapps.
       const targetParsed = new URL(`http://127.0.0.1:${serverPort}`);
 
-      const apps = (options.apps || [])
-        .filter((a) => a && a.enabled !== false && a.url)
-        .map((a) => {
-          const appPath = a.url.startsWith('/') ? a.url : `/${a.url}`;
-          const tileUrl = `${serverUrl}${appPath}`;
-          let iconUrl;
-          if (a.icon && /^https?:\/\//.test(a.icon)) {
-            iconUrl = a.icon;
-          } else if (a.icon) {
-            iconUrl = `${serverUrl}${a.icon.startsWith('/') ? a.icon : `/${a.icon}`}`;
-          } else if (FALLBACK_ICON) {
-            iconUrl = `${serverUrl}${FALLBACK_ICON_ROUTE}`;
-          } else {
-            iconUrl = tileUrl;
-          }
-          return {
-            label: a.label || appPath,
-            description: a.description || '',
-            tileUrl,
-            iconUrl,
-          };
-        });
+      const enabledApps = (options.apps || []).filter((a) => a && a.enabled !== false && a.url);
+
+      const apps = enabledApps.map((a) => {
+        const appPath = a.url.startsWith('/') ? a.url : `/${a.url}`;
+        const tileUrl = `${serverUrl}${appPath}`;
+        let iconUrl;
+        if (a.icon && /^https?:\/\//.test(a.icon)) {
+          iconUrl = a.icon;
+        } else if (a.icon) {
+          iconUrl = `${serverUrl}${a.icon.startsWith('/') ? a.icon : `/${a.icon}`}`;
+        } else if (FALLBACK_ICON) {
+          iconUrl = `${serverUrl}${FALLBACK_ICON_ROUTE}`;
+        } else {
+          iconUrl = tileUrl;
+        }
+        return {
+          label: a.label || appPath,
+          description: a.description || '',
+          tileUrl,
+          iconUrl,
+        };
+      });
+
+      // Info for the standalone app-chooser webapp (public/index.html). Published
+      // as a delta so it can be read without authentication via the Signal K REST
+      // API at /signalk/v1/api/vessels/self/plugins/signalk-navico-embedder/webapps.
+      // URLs are kept server-relative so they resolve correctly whether the chooser
+      // is opened directly on the server or through this proxy on the MFD.
+      const webapps = enabledApps.map((a) => {
+        const appPath = a.url.startsWith('/') ? a.url : `/${a.url}`;
+        let icon = '';
+        if (a.icon && /^https?:\/\//.test(a.icon)) {
+          icon = a.icon;
+        } else if (a.icon) {
+          icon = a.icon.startsWith('/') ? a.icon : `/${a.icon}`;
+        }
+        return {
+          name: a.label || appPath,
+          url: appPath,
+          icon,
+          description: a.description || '',
+        };
+      });
 
       const buildAnnouncement = (app2) => JSON.stringify({
         Version: '1',
@@ -400,6 +421,18 @@ module.exports = function (app) {
         }
         app.debug(`Proxy listening on ${serverUrl}, forwarding to ${targetParsed.origin}`);
       });
+
+      // Publish the enabled-app list to the data model so the standalone
+      // app-chooser webapp can fetch it (works for unauthenticated clients when
+      // read-only access is enabled, and through the proxy with token injection).
+      app.handleMessage('signalk-navico-embedder', {
+        updates: [
+          {
+            values: [{ path: 'plugins.signalk-navico-embedder.webapps', value: webapps }],
+          },
+        ],
+      });
+      app.debug(`Published ${webapps.length} webapp(s) to plugins.signalk-navico-embedder.webapps`);
 
       publish();
       publishInterval = setInterval(publish, PUBLISH_INTERVAL);

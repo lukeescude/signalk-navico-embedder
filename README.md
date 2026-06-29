@@ -42,6 +42,26 @@ enabled tiles.
 Every enabled app is announced to the MFD as `http://<ip>:<port><app-path>`, and the
 proxy forwards that path to the local Signal K server.
 
+## App-chooser webapp
+
+The plugin also ships a standalone web app at **`/signalk-navico-embedder/`** that shows
+every enabled app in a grid of icon + title tiles. Tap a tile to open that app. The page
+also renders a **debug panel** (user agent, query-string parameters the MFD appends,
+window/screen size, etc.) which is handy when diagnosing the MFD's browser.
+
+It works for both logged-in and unauthenticated users. On plugin startup the enabled-app
+list is published to the data model at `plugins.signalk-navico-embedder.webapps`, which the
+page reads from:
+
+```
+GET /signalk/v1/api/vessels/self/plugins/signalk-navico-embedder/webapps
+```
+
+Each entry contains `name`, `url`, and `icon`. URLs are server-relative, so the same page
+works whether it is opened directly on the Signal K server or through the proxy on the MFD.
+Unauthenticated access to the list requires **Allow Read-Only Access** (or, on the MFD, the
+token the proxy injects — see [Authentication](#authentication)).
+
 ## Authentication
 
 The MFD has no Signal K session cookie, so when Signal K has **authentication enabled** and **Allow Read-Only Access** disabled, all API and WebSocket requests from the MFD return 401 and no data is displayed — even though the WebSocket upgrade itself may appear to succeed.
