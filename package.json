@@ -18,7 +18,8 @@
     "icon.png",
     "icon.ico",
     "public",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "screenshots"
   ],
   "lint-staged": {
     "*.js": "eslint --fix",
@@ -45,7 +46,10 @@
   },
   "signalk": {
     "displayName": "Navico MFD Embedder",
-    "appIcon": "./icon.png"
+    "appIcon": "./icon.png",
+    "screenshots": [
+      "./screenshots/screenshot_home.png"
+    ]
   },
   "repository": {
     "type": "git",
