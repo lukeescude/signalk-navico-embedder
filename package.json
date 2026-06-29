@@ -45,7 +45,11 @@
   },
   "signalk": {
     "displayName": "Navico MFD Embedder",
-    "appIcon": "./icon.png"
+    "appIcon": "./icon.png",
+    "recommends": [
+      "hoekens-anchor-alarm",
+      "signalk-watch-schedule"
+    ]
   },
   "repository": {
     "type": "git",
