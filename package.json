@@ -20,7 +20,8 @@
     "icon.png",
     "icon.ico",
     "public",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "screenshots"
   ],
   "lint-staged": {
     "*.js": "eslint --fix",
@@ -51,6 +52,8 @@
     "recommends": [
       "hoekens-anchor-alarm",
       "signalk-watch-schedule"
+    "screenshots": [
+      "./screenshots/screenshot_home.png"
     ]
   },
   "repository": {
