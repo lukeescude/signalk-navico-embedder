@@ -13,6 +13,11 @@ const PUBLISH_INTERVAL = 10 * 1000;
 // have no icon of their own. Namespaced so it cannot collide with a proxied path.
 const FALLBACK_ICON_ROUTE = '/__navico-embedder-icon';
 
+// Path of this plugin's own app-chooser webapp (served by Signal K from /public).
+// In "launcher" display mode this single page is announced as the only MFD tile,
+// and the user picks an app to open from there.
+const LAUNCHER_PATH = '/signalk-navico-embedder/';
+
 const STRIP_RESPONSE_HEADERS = new Set([
   'x-frame-options',
   'content-security-policy',
@@ -152,6 +157,17 @@ module.exports = function (app) {
         + 'button to auto-detect web apps, then enable the ones you want to appear as tiles on the MFD.',
       required: [],
       properties: {
+        mode: {
+          type: 'string',
+          title: 'MFD Display Mode',
+          description:
+            'Individual Apps: announce every enabled web app below as its own tile on the MFD. '
+            + 'Launcher: announce a single tile that opens this plugin\'s app-chooser page, '
+            + 'from which all enabled web apps can be launched.',
+          enum: ['individual', 'launcher'],
+          enumNames: ['Individual Apps', 'Launcher'],
+          default: 'individual',
+        },
         ip: {
           type: 'string',
           title: 'Local IP address override',
@@ -205,8 +221,9 @@ module.exports = function (app) {
       const targetParsed = new URL(`http://127.0.0.1:${serverPort}`);
 
       const enabledApps = (options.apps || []).filter((a) => a && a.enabled !== false && a.url);
+      const mode = options.mode === 'launcher' ? 'launcher' : 'individual';
 
-      const apps = enabledApps.map((a) => {
+      const individualApps = enabledApps.map((a) => {
         const appPath = a.url.startsWith('/') ? a.url : `/${a.url}`;
         const tileUrl = `${serverUrl}${appPath}`;
         let iconUrl;
@@ -226,6 +243,24 @@ module.exports = function (app) {
           iconUrl,
         };
       });
+
+      // In launcher mode we announce just one tile — this plugin's own app-chooser
+      // page — instead of one tile per app. The chooser then lists every enabled
+      // web app (read from the webapps delta published below) for the user to open.
+      let apps;
+      if (mode === 'launcher') {
+        const launcherUrl = `${serverUrl}${LAUNCHER_PATH}`;
+        apps = [
+          {
+            label: 'SignalK Webapps',
+            description: 'Open the app launcher to browse all enabled web apps.',
+            tileUrl: launcherUrl,
+            iconUrl: FALLBACK_ICON ? `${serverUrl}${FALLBACK_ICON_ROUTE}` : launcherUrl,
+          },
+        ];
+      } else {
+        apps = individualApps;
+      }
 
       // Info for the standalone app-chooser webapp (public/index.html). Published
       // as a delta so it can be read without authentication via the Signal K REST
@@ -414,7 +449,12 @@ module.exports = function (app) {
       });
 
       server.listen(port, '0.0.0.0', () => {
-        if (apps.length === 0) {
+        if (mode === 'launcher') {
+          app.setPluginStatus(
+            `Announcing app launcher to MFD via ${serverUrl} `
+            + `(${enabledApps.length} app(s) available, IP: ${ip})`,
+          );
+        } else if (apps.length === 0) {
           app.setPluginStatus(`Proxy listening on ${serverUrl} — no apps configured yet (use Discover)`);
         } else {
           app.setPluginStatus(`Announcing ${apps.length} tile(s) to MFD via ${serverUrl} (IP: ${ip})`);

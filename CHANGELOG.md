@@ -1,5 +1,6 @@
 # v1.3.0
 
+- New **MFD display mode** plugin option: choose **Individual Apps** (default — announce every enabled web app as its own MFD tile, as before) or **Launcher** (announce a single tile that opens the app-chooser page, from which all enabled apps are launched)
 - Standalone app-chooser webapp at `/signalk-navico-embedder/`: shows every enabled web app in a grid of icon + title tiles, accessible to both logged-in and unauthenticated users
 - Publishes the enabled-app list (name, url, icon) as a delta to `plugins.signalk-navico-embedder.webapps` on startup, readable without authentication via `GET /signalk/v1/api/vessels/self/plugins/signalk-navico-embedder/webapps`
 - The chooser page shows debug information (user agent, query string and parsed params, window/screen size, etc.) to aid MFD troubleshooting

@@ -147,8 +147,25 @@ function NumberField({ label, value, onChange, hint, placeholder }) {
   )
 }
 
+function SelectField({ label, value, onChange, options, hint }) {
+  return (
+    <div style={S.fieldRow}>
+      <span style={S.label}>{label}</span>
+      <select style={{ ...S.input, width: 240 }} value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {hint && <span style={S.hint}>{hint}</span>}
+    </div>
+  )
+}
+
 export default function PluginConfigurationPanel({ configuration, save }) {
   const cfg = configuration || {}
+  const [mode, setMode] = useState(cfg.mode === 'launcher' ? 'launcher' : 'individual')
   const [ip, setIp] = useState(cfg.ip || '')
   const [port, setPort] = useState(cfg.port || 8080)
   const [serverPort, setServerPort] = useState(cfg.serverPort || '')
@@ -173,12 +190,16 @@ export default function PluginConfigurationPanel({ configuration, save }) {
 
   const buildConfig = useCallback(
     (appsList) => ({
+      mode,
       ip,
       port,
       ...(serverPort === '' ? {} : { serverPort }),
+      // Preserve the auth token; it has no field in this panel and would
+      // otherwise be wiped from the saved configuration.
+      ...(cfg.skToken ? { skToken: cfg.skToken } : {}),
       apps: appsList
     }),
-    [ip, port, serverPort]
+    [mode, ip, port, serverPort, cfg.skToken]
   )
 
   const doSave = useCallback(async () => {
@@ -291,6 +312,21 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   return (
     <div style={S.root}>
       <div style={S.sectionTitle}>Plugin Settings</div>
+
+      <SelectField
+        label="MFD display mode"
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: 'individual', label: 'Individual Apps' },
+          { value: 'launcher', label: 'Launcher' }
+        ]}
+        hint={
+          mode === 'launcher'
+            ? 'Announce one tile that opens the app chooser'
+            : 'Announce every enabled app as its own tile'
+        }
+      />
 
       <TextField
         label="Local IP address override"
