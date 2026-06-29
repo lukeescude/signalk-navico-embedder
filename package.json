@@ -38,10 +38,6 @@
   "contributors": [
     "Zach Hoeken <hoeken@gmail.com>"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/lukeescude/signalk-navico-embedder.git"
-  },
   "license": "ISC",
   "type": "commonjs",
   "engines": {
