@@ -28,8 +28,9 @@ configurator that replaces the generic settings form:
 
 1. **Local IP address override** — leave blank to auto-detect. Set this if the machine has multiple network interfaces and the wrong one is selected.
 2. **Proxy port** — the HTTP port this proxy listens on (default: `8080`).
-3. **Discover Installed Webapps** — scans the Signal K server for installed web apps and adds any new ones to the list below.
-4. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
+3. **Signal K authentication token** — see [Authentication](#authentication) below.
+4. **Discover Installed Webapps** — scans the Signal K server for installed web apps and adds any new ones to the list below.
+5. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
    - drag to reorder,
    - edit the **name**, **description**, and **icon** shown on the tile,
    - toggle **enabled** (disabled apps are kept in the list but not announced),
@@ -40,6 +41,30 @@ enabled tiles.
 
 Every enabled app is announced to the MFD as `http://<ip>:<port><app-path>`, and the
 proxy forwards that path to the local Signal K server.
+
+## Authentication
+
+The MFD has no Signal K session cookie, so when Signal K has **authentication enabled** and **Allow Read-Only Access** disabled, all API and WebSocket requests from the MFD return 401 and no data is displayed — even though the WebSocket upgrade itself may appear to succeed.
+
+There are two ways to fix this:
+
+### Option A — Enable read-only access (simpler)
+
+In Signal K admin go to **Security** and toggle **Allow Read-Only Access**. This permits unauthenticated devices to read vessel data without being able to write. Appropriate for a private boat LAN.
+
+### Option B — Inject a JWT token (more secure)
+
+1. In Signal K admin go to **Security → Token Management** (or use `POST /signalk/v1/auth/login`) to generate a token for the MFD.
+2. Paste the JWT into **Plugin Config → Navico MFD Embedder → Signal K authentication token**.
+3. Save and restart the plugin.
+
+When a token is configured the proxy:
+
+- Adds `Authorization: Bearer <token>` to every forwarded HTTP request
+- Appends `?token=<token>` to every WebSocket upgrade URL
+- Injects `window.SK_TOKEN = "<token>"` into every HTML response so the webapp JS can authenticate its own fetch and WebSocket calls independently
+
+This means the token only needs to be stored once (in the plugin config) and works transparently for all proxied apps.
 
 ## How the B&G/Navico MFD webapp tile protocol works
 
@@ -111,16 +136,17 @@ These APIs are polyfilled by injecting a `<script>` into every HTML response:
 
 ## Proxy behaviour summary
 
-| Request/Response                      | What the proxy does                           |
-| ------------------------------------- | --------------------------------------------- |
-| Conditional cache headers in request  | Stripped — prevents spurious 304s             |
-| `Accept-Encoding` in request          | Stripped — ensures uncompressed responses     |
-| `X-Frame-Options` in response         | Stripped                                      |
-| `Content-Security-Policy` in response | Stripped                                      |
-| `Location` redirect headers           | Rewritten from target origin to proxy origin  |
-| HTML responses                        | Polyfill `<script>` injected before `</head>` |
-| JavaScript responses                  | Transpiled via esbuild to `chrome70` target   |
-| WebSocket upgrades                    | Forwarded transparently to target             |
+| Request/Response                      | What the proxy does                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Conditional cache headers in request  | Stripped — prevents spurious 304s                                                        |
+| `Accept-Encoding` in request          | Stripped — ensures uncompressed responses                                                |
+| `X-Frame-Options` in response         | Stripped                                                                                 |
+| `Content-Security-Policy` in response | Stripped                                                                                 |
+| `Location` redirect headers           | Rewritten from target origin to proxy origin                                             |
+| HTML responses                        | Polyfill `<script>` injected before `</head>`; `window.SK_TOKEN` set if token configured |
+| JavaScript responses                  | Transpiled via esbuild to `chrome70` target                                              |
+| WebSocket upgrades                    | Forwarded to target; `Authorization` header and `?token=` appended if token configured   |
+| All HTTP requests (if token set)      | `Authorization: Bearer <token>` header added                                             |
 
 ## Development
 
