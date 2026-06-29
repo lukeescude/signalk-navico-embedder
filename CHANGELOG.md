@@ -5,6 +5,15 @@
 - Publishes the enabled-app list (name, url, icon) as a delta to `plugins.signalk-navico-embedder.webapps` on startup, readable without authentication via `GET /signalk/v1/api/vessels/self/plugins/signalk-navico-embedder/webapps`
 - The chooser page shows debug information (user agent, query string and parsed params, window/screen size, etc.) to aid MFD troubleshooting
 
+# v1.2.2
+
+- WebSocket proxy reliability: disable Nagle (`setNoDelay(true)`) on both the MFD and upstream sockets so small WS frames are not buffered
+- Added a 10-second upgrade-handshake timeout — if the upstream does not complete the WS handshake in time, both sockets are destroyed; the timer is cancelled on success or error so it never kills an established tunnel
+- Abort in-progress upgrades when the MFD socket closes or errors before the handshake completes
+- Reject non-101 upgrade responses (e.g. SK auth failures) instead of tunnelling them as if they were a WebSocket stream
+- Cross-link `close` events on both tunnel sockets so either side tearing down immediately cleans up the other
+- Improved debug logging for WS tunnel lifecycle and upstream errors
+
 # v1.2.1
 
 - Upgraded esbuild from 0.24.x to 0.28.1 (resolves GHSA-67mh-4wv8-2f99; only the dev server API was affected, not the `transform` usage in this plugin)
