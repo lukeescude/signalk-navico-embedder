@@ -3,7 +3,10 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Lock the viewport: this runs full-screen on a fixed MFD touchscreen, so
+       pinch / double-tap zoom would only break the layout. -->
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>SignalK Webapps</title>
   <style>
     /* Dark is the default (matches the MFD's night mode and JS-disabled fallback). */
@@ -45,8 +48,23 @@
       --debug-td: #3a3f52;
     }
 
+    /* Kiosk touch hardening for the MFD's embedded browser: stop the page from
+       zooming, overscroll-bouncing / pull-to-refresh, auto-inflating text, or
+       selecting text and showing long-press menus on touch. */
+    html,
+    body {
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
     * {
       box-sizing: border-box;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     body {
@@ -67,7 +85,6 @@
       font-size: 22px;
       margin: 0 0 24px;
       cursor: pointer;
-      user-select: none;
     }
 
     .subtitle {
@@ -398,6 +415,15 @@
         });
       }
 
+      // Kiosk hardening: suppress the long-press context menu (CSS touch-callout
+      // only covers iOS; Android Chromium still pops one up for links/images).
+      function setupKioskGuards() {
+        document.addEventListener('contextmenu', function (e) {
+          e.preventDefault();
+        });
+      }
+
+      setupKioskGuards();
       renderDebug();
       setupDebugToggle();
       loadApps();
