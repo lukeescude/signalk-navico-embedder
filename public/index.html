@@ -200,10 +200,26 @@
         return (s || '??').slice(0, 2).toUpperCase();
       }
 
+      // Forward this page's query string (e.g. ?darkMode=true) verbatim to each
+      // webapp so the MFD's settings reach the embedded app unchanged.
+      function appendQuery(url, search) {
+        var query = search && search.charAt(0) === '?' ? search.slice(1) : search;
+        if (!query) return url;
+        // Keep the query before any hash fragment (e.g. /app#/page).
+        var hash = '';
+        var hashIndex = url.indexOf('#');
+        if (hashIndex !== -1) {
+          hash = url.slice(hashIndex);
+          url = url.slice(0, hashIndex);
+        }
+        var sep = url.indexOf('?') === -1 ? '?' : '&';
+        return url + sep + query + hash;
+      }
+
       function makeTile(info) {
         var a = document.createElement('a');
         a.className = 'tile';
-        a.href = info.url || '#';
+        a.href = info.url ? appendQuery(info.url, location.search) : '#';
 
         var icon = document.createElement('div');
         icon.className = 'icon';
