@@ -186,6 +186,19 @@ npm run build:config
 The backend plugin ([`index.js`](index.js)) is plain CommonJS and needs no build step.
 `npm run prepublishOnly` rebuilds the configurator automatically before publishing.
 
+### Tests
+
+The plugin has a test suite built on Node's built-in test runner (no extra
+dependencies). It covers the config-to-announcement transforms and the proxy's
+runtime behaviour — header rewriting, HTML/token injection, JS transpilation,
+the fallback-icon route, and the start/stop lifecycle (UDP is stubbed, so no
+multicast traffic is emitted):
+
+```bash
+npm test          # run once
+npm run test:watch # re-run on change
+```
+
 ## Reference
 
 - [signalk-mfd-plugin](https://github.com/htool/signalk-mfd-plugin) — source of the UDP multicast protocol details

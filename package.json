@@ -11,6 +11,8 @@
     "lint:fix": "eslint --fix .",
     "format": "eslint --fix . && prettier --write .",
     "format:check": "eslint . && prettier --check .",
+    "test": "node --test",
+    "test:watch": "node --test --watch",
     "prepare": "husky || true"
   },
   "files": [
