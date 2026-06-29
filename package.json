@@ -48,10 +48,11 @@
   },
   "signalk": {
     "displayName": "Navico MFD Embedder",
-    "appIcon": "./icon.png",
+    "appIcon": "icon.png",
     "recommends": [
       "hoekens-anchor-alarm",
       "signalk-watch-schedule"
+    ],
     "screenshots": [
       "./screenshots/screenshot_home.png"
     ]
@@ -61,7 +62,7 @@
     "url": "https://github.com/lukeescude/signalk-navico-embedder.git"
   },
   "dependencies": {
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.1"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
