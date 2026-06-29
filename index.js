@@ -353,6 +353,10 @@ module.exports = function (app) {
       });
 
       server.on('upgrade', (req, socket) => {
+        // Disable Nagle on the MFD socket immediately — small WS packets should
+        // not be buffered; without this the upgrade handshake itself can be delayed.
+        socket.setNoDelay(true);
+
         const wsHeaders = {};
         for (const [k, v] of Object.entries(req.headers)) {
           if (!STRIP_REQUEST_HEADERS.has(k.toLowerCase())) {
@@ -375,7 +379,40 @@ module.exports = function (app) {
           headers: wsHeaders,
         });
 
+        // Manual timer covers only the upgrade handshake — cancelled on success or
+        // error so it never fires against an already-established WS tunnel.
+        // (proxyReq.setTimeout would stay active on the socket indefinitely and
+        //  would kill the tunnel during any quiet period with no incoming data.)
+        const upgradeTimer = setTimeout(() => {
+          app.debug(`WS upgrade timeout: ${req.url}`);
+          proxyReq.destroy();
+          socket.destroy();
+        }, 10000);
+
+        // If the MFD disconnects before the upstream upgrade completes, abort it.
+        socket.on('error', () => {
+          clearTimeout(upgradeTimer);
+          proxyReq.destroy();
+        });
+        socket.on('close', () => {
+          clearTimeout(upgradeTimer);
+          proxyReq.destroy();
+        });
+
         proxyReq.on('upgrade', (proxyRes, proxySocket) => {
+          clearTimeout(upgradeTimer);
+          proxySocket.setNoDelay(true);
+
+          // If SK rejected the upgrade (e.g. 401 auth failure), don't tunnel
+          // a non-WebSocket response to the browser as if it were a WS stream.
+          if (proxyRes.statusCode !== 101) {
+            app.debug(`WS upgrade rejected ${req.url} -> ${proxyRes.statusCode}`);
+            proxySocket.destroy();
+            socket.destroy();
+            return;
+          }
+
+          app.debug(`WS tunnel up: ${req.url}`);
           const responseHead = [
             `HTTP/1.1 ${proxyRes.statusCode} Switching Protocols`,
             ...Object.entries(proxyRes.headers).map(([k, v]) => `${k}: ${v}`),
@@ -384,11 +421,18 @@ module.exports = function (app) {
           socket.write(responseHead);
           proxySocket.pipe(socket);
           socket.pipe(proxySocket);
+          // Cross-link both error and close so either side tearing down cleans up the other.
           socket.on('error', () => proxySocket.destroy());
+          socket.on('close', () => proxySocket.destroy());
           proxySocket.on('error', () => socket.destroy());
+          proxySocket.on('close', () => socket.destroy());
         });
 
-        proxyReq.on('error', () => socket.destroy());
+        proxyReq.on('error', (err) => {
+          clearTimeout(upgradeTimer);
+          app.debug(`WS upstream error ${req.url}: ${err.message}`);
+          socket.destroy();
+        });
         proxyReq.end();
       });
 
