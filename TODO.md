@@ -8,6 +8,4 @@
   * tides
   * signalk-weather-map
   * ???
-* fix scoring issues
-  * plugin tests
-  * npm audit
+* add screenshots

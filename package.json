@@ -58,7 +58,7 @@
     "url": "https://github.com/lukeescude/signalk-navico-embedder.git"
   },
   "dependencies": {
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.28.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
