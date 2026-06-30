@@ -2,8 +2,6 @@
 
 A SignalK plugin that presents your installed Signal K web apps as webapp tiles on B&G/Navico marine MFDs (Zeus, Vulcan, etc.). It handles the UDP multicast announcement protocol the MFD expects, and works around the significant browser limitations of the MFD's embedded Chromium.
 
-![Navico MFD Embedder](screenshots/screenshot_home.png)
-
 ## What it does
 
 1. Runs an HTTP reverse proxy that forwards requests to the local Signal K server

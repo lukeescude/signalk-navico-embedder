@@ -51,7 +51,8 @@
     "appIcon": "icon.png",
     "recommends": [
       "hoekens-anchor-alarm",
-      "signalk-watch-schedule"
+      "signalk-watch-schedule",
+      "signalk-sailsense"
     ],
     "screenshots": [
       "./screenshots/screenshot_home.png"
