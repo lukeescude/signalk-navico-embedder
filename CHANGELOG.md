@@ -1,9 +1,16 @@
 # v1.3.0
 
 - New **MFD display mode** plugin option: choose **Individual Apps** (default — announce every enabled web app as its own MFD tile, as before) or **Launcher** (announce a single tile that opens the app-chooser page, from which all enabled apps are launched)
-- Standalone app-chooser webapp at `/signalk-navico-embedder/`: shows every enabled web app in a grid of icon + title tiles, accessible to both logged-in and unauthenticated users
+- Standalone app-chooser webapp at `/signalk-navico-embedder/`: lists every enabled web app, accessible to both logged-in and unauthenticated users
+- Redesigned the chooser tiles as horizontal rows — a large (96px) rounded icon on the left with the app name and description stacked on the right; the whole row is a single clickable link, descriptions clamp to four lines, and the problematic `title`/`alt` attributes were dropped for the MFD
+- New per-app **description** field in the configuration panel, shown on the chooser tiles
+- Light/dark theming for the chooser: all colors moved into CSS variables, with an inline head script that selects the palette before first paint — `?mode=night` forces dark, `?mode=day` forces light, and with no `mode` param it follows the browser's `prefers-color-scheme` (defaulting to dark)
+- The chooser forwards its own query string verbatim to every webapp link (e.g. `?mode=day` and other MFD params reach the embedded apps), merging with `&` when the target URL already has a query and keeping the query ahead of any `#` fragment
+- Hardened the chooser for kiosk touchscreen use: viewport locked against pinch/double-tap zoom, `touch-action: manipulation`, no tap highlight / text selection / iOS touch-callout / overscroll bounce / text auto-inflation, and the long-press context menu is suppressed in JS
 - Publishes the enabled-app list (name, url, icon) as a delta to `plugins.signalk-navico-embedder.webapps` on startup, readable without authentication via `GET /signalk/v1/api/vessels/self/plugins/signalk-navico-embedder/webapps`
 - The chooser page shows debug information (user agent, query string and parsed params, window/screen size, etc.) to aid MFD troubleshooting
+- Added a test suite using Node's built-in test runner (no new dependencies) wired up via `npm test`; the config-to-announcement transforms were lifted out of the `start()` closure into testable module-level helpers (`getServerPort`, `buildAnnouncement`, `buildAppModel`) with no behaviour change. Covers port resolution, announcement/tile/webapp model building, launcher vs individual mode, and the running proxy (header stripping, HTML/token injection, esbuild transpilation, fallback-icon route, `Location` rewriting, 502 handling, and start/stop lifecycle with UDP stubbed)
+- Packaging fix: restored the bundled `icon.png`/`icon.ico` fallback icons and re-added them to the `files` array so they ship in the npm package and `FALLBACK_ICON` resolves at runtime for installed users
 
 # v1.2.2
 
