@@ -17,6 +17,8 @@
   },
   "files": [
     "index.js",
+    "icon.png",
+    "icon.ico",
     "public",
     "CHANGELOG.md",
     "screenshots"
