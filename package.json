@@ -11,6 +11,8 @@
     "lint:fix": "eslint --fix .",
     "format": "eslint --fix . && prettier --write .",
     "format:check": "eslint . && prettier --check .",
+    "test": "node --test",
+    "test:watch": "node --test --watch",
     "prepare": "husky || true"
   },
   "files": [
@@ -45,6 +47,10 @@
   "signalk": {
     "displayName": "Navico MFD Embedder",
     "appIcon": "icon.png",
+    "recommends": [
+      "hoekens-anchor-alarm",
+      "signalk-watch-schedule"
+    ],
     "screenshots": [
       "./screenshots/screenshot_home.png"
     ]

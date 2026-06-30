@@ -7,3 +7,6 @@ src
 *.js
 *.cjs
 *.mjs
+
+# Markdown
+*.md

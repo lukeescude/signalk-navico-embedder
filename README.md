@@ -28,11 +28,14 @@ Then restart the SignalK server and enable the plugin in **Server → Plugin Con
 Open **Server → Plugin Config → Navico MFD Embedder**. The plugin ships an embedded
 configurator that replaces the generic settings form:
 
-1. **Local IP address override** — leave blank to auto-detect. Set this if the machine has multiple network interfaces and the wrong one is selected.
-2. **Proxy port** — the HTTP port this proxy listens on (default: `8080`).
-3. **Signal K authentication token** — see [Authentication](#authentication) below.
-4. **Discover Installed Webapps** — scans the Signal K server for installed web apps and adds any new ones to the list below.
-5. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
+1. **MFD display mode** — choose how apps appear on the MFD:
+   - **Individual Apps** (default) — announce every enabled app below as its own tile on the MFD.
+   - **Launcher** — announce a single tile that opens the [app-chooser webapp](#app-chooser-webapp), from which all enabled apps can be launched. Keeps the MFD's tile list uncluttered when you have many apps.
+2. **Local IP address override** — leave blank to auto-detect. Set this if the machine has multiple network interfaces and the wrong one is selected.
+3. **Proxy port** — the HTTP port this proxy listens on (default: `8080`).
+4. **Signal K authentication token** — see [Authentication](#authentication) below.
+5. **Discover Installed Webapps** — scans the Signal K server for installed web apps and adds any new ones to the list below.
+6. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
    - drag to reorder,
    - edit the **name**, **description**, and **icon** shown on the tile,
    - toggle **enabled** (disabled apps are kept in the list but not announced),
@@ -41,8 +44,30 @@ configurator that replaces the generic settings form:
 Click **Save Configuration** to apply; the plugin restarts and re-announces the
 enabled tiles.
 
-Every enabled app is announced to the MFD as `http://<ip>:<port><app-path>`, and the
-proxy forwards that path to the local Signal K server.
+In **Individual Apps** mode every enabled app is announced to the MFD as
+`http://<ip>:<port><app-path>`, and the proxy forwards that path to the local Signal K
+server. In **Launcher** mode a single tile pointing at `/signalk-navico-embedder/` is
+announced instead; the enabled-app list still drives what that page shows.
+
+## App-chooser webapp
+
+The plugin also ships a standalone web app at **`/signalk-navico-embedder/`** that shows
+every enabled app in a grid of icon + title tiles. Tap a tile to open that app. The page
+also renders a **debug panel** (user agent, query-string parameters the MFD appends,
+window/screen size, etc.) which is handy when diagnosing the MFD's browser.
+
+It works for both logged-in and unauthenticated users. On plugin startup the enabled-app
+list is published to the data model at `plugins.signalk-navico-embedder.webapps`, which the
+page reads from:
+
+```
+GET /signalk/v1/api/vessels/self/plugins/signalk-navico-embedder/webapps
+```
+
+Each entry contains `name`, `url`, and `icon`. URLs are server-relative, so the same page
+works whether it is opened directly on the Signal K server or through the proxy on the MFD.
+Unauthenticated access to the list requires **Allow Read-Only Access** (or, on the MFD, the
+token the proxy injects — see [Authentication](#authentication)).
 
 ## Authentication
 
@@ -162,6 +187,19 @@ npm run build:config
 
 The backend plugin ([`index.js`](index.js)) is plain CommonJS and needs no build step.
 `npm run prepublishOnly` rebuilds the configurator automatically before publishing.
+
+### Tests
+
+The plugin has a test suite built on Node's built-in test runner (no extra
+dependencies). It covers the config-to-announcement transforms and the proxy's
+runtime behaviour — header rewriting, HTML/token injection, JS transpilation,
+the fallback-icon route, and the start/stop lifecycle (UDP is stubbed, so no
+multicast traffic is emitted):
+
+```bash
+npm test          # run once
+npm run test:watch # re-run on change
+```
 
 ## Reference
 

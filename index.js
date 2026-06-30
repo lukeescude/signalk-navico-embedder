@@ -13,6 +13,11 @@ const PUBLISH_INTERVAL = 10 * 1000;
 // have no icon of their own. Namespaced so it cannot collide with a proxied path.
 const FALLBACK_ICON_ROUTE = '/__navico-embedder-icon';
 
+// Path of this plugin's own app-chooser webapp (served by Signal K from /public).
+// In "launcher" display mode this single page is announced as the only MFD tile,
+// and the user picks an app to open from there.
+const LAUNCHER_PATH = '/signalk-navico-embedder/';
+
 const STRIP_RESPONSE_HEADERS = new Set([
   'x-frame-options',
   'content-security-policy',
@@ -124,21 +129,112 @@ const FALLBACK_ICON = [
   }
 });
 
+// Look up the local Signal K server's HTTP port; everything is proxied there.
+// An explicit config override wins; otherwise mirror the server's own
+// resolution order: PORT env var, then settings.port, then the 3000 default.
+function getServerPort(app, options) {
+  if (options && options.serverPort) return options.serverPort;
+  return (
+    Number(process.env.PORT)
+    || (app.config && app.config.settings && app.config.settings.port)
+    || 3000
+  );
+}
+
+// Build the MFD UDP announcement payload for a single tile. Pure: depends only
+// on the advertised IP and the tile's resolved label/description/icon/url.
+function buildAnnouncement(ip, tile) {
+  return JSON.stringify({
+    Version: '1',
+    Source: 'signalk-navico-embedder',
+    IP: ip,
+    FeatureName: tile.label,
+    Text: [{ Language: 'en', Name: tile.label, Description: tile.description }],
+    Icon: tile.iconUrl,
+    URL: tile.tileUrl,
+    OnlyShowOnClientIP: 'true',
+    BrowserPanel: {
+      Enable: true,
+      ProgressBarEnable: true,
+      MenuText: [{ Language: 'en', Name: tile.label }],
+    },
+  });
+}
+
+// Derive what to announce/publish from the saved options. Pure transform of
+// config -> { mode, enabledApps, apps, webapps }:
+//   - apps:    the tiles announced over UDP (one per enabled app, or a single
+//              launcher tile in launcher mode). URLs are absolute (the MFD opens
+//              them through this proxy).
+//   - webapps: the enabled-app list published as a delta for the standalone
+//              app-chooser webapp. URLs are kept server-relative so they resolve
+//              whether the chooser is opened directly or through the proxy.
+function buildAppModel(options, ip, port) {
+  const serverUrl = `http://${ip}:${port}`;
+  const enabledApps = (options.apps || []).filter((a) => a && a.enabled !== false && a.url);
+  const mode = options.mode === 'launcher' ? 'launcher' : 'individual';
+
+  const individualApps = enabledApps.map((a) => {
+    const appPath = a.url.startsWith('/') ? a.url : `/${a.url}`;
+    const tileUrl = `${serverUrl}${appPath}`;
+    let iconUrl;
+    if (a.icon && /^https?:\/\//.test(a.icon)) {
+      iconUrl = a.icon;
+    } else if (a.icon) {
+      iconUrl = `${serverUrl}${a.icon.startsWith('/') ? a.icon : `/${a.icon}`}`;
+    } else if (FALLBACK_ICON) {
+      iconUrl = `${serverUrl}${FALLBACK_ICON_ROUTE}`;
+    } else {
+      iconUrl = tileUrl;
+    }
+    return {
+      label: a.label || appPath,
+      description: a.description || '',
+      tileUrl,
+      iconUrl,
+    };
+  });
+
+  // In launcher mode we announce just one tile — this plugin's own app-chooser
+  // page — instead of one tile per app. The chooser then lists every enabled
+  // web app (read from the webapps delta) for the user to open.
+  let apps;
+  if (mode === 'launcher') {
+    const launcherUrl = `${serverUrl}${LAUNCHER_PATH}`;
+    apps = [
+      {
+        label: 'SignalK Webapps',
+        description: 'Open the app launcher to browse all enabled web apps.',
+        tileUrl: launcherUrl,
+        iconUrl: FALLBACK_ICON ? `${serverUrl}${FALLBACK_ICON_ROUTE}` : launcherUrl,
+      },
+    ];
+  } else {
+    apps = individualApps;
+  }
+
+  const webapps = enabledApps.map((a) => {
+    const appPath = a.url.startsWith('/') ? a.url : `/${a.url}`;
+    let icon = '';
+    if (a.icon && /^https?:\/\//.test(a.icon)) {
+      icon = a.icon;
+    } else if (a.icon) {
+      icon = a.icon.startsWith('/') ? a.icon : `/${a.icon}`;
+    }
+    return {
+      name: a.label || appPath,
+      url: appPath,
+      icon,
+      description: a.description || '',
+    };
+  });
+
+  return { mode, enabledApps, apps, webapps };
+}
+
 module.exports = function (app) {
   let server = null;
   let publishInterval = null;
-
-  // Look up the local Signal K server's HTTP port; everything is proxied there.
-  // An explicit config override wins; otherwise mirror the server's own
-  // resolution order: PORT env var, then settings.port, then the 3000 default.
-  function getServerPort(options) {
-    if (options && options.serverPort) return options.serverPort;
-    return (
-      Number(process.env.PORT)
-      || (app.config && app.config.settings && app.config.settings.port)
-      || 3000
-    );
-  }
 
   return {
     id: 'signalk-navico-embedder',
@@ -152,6 +248,17 @@ module.exports = function (app) {
         + 'button to auto-detect web apps, then enable the ones you want to appear as tiles on the MFD.',
       required: [],
       properties: {
+        mode: {
+          type: 'string',
+          title: 'MFD Display Mode',
+          description:
+            'Individual Apps: announce every enabled web app below as its own tile on the MFD. '
+            + 'Launcher: announce a single tile that opens this plugin\'s app-chooser page, '
+            + 'from which all enabled web apps can be launched.',
+          enum: ['individual', 'launcher'],
+          enumNames: ['Individual Apps', 'Launcher'],
+          default: 'individual',
+        },
         ip: {
           type: 'string',
           title: 'Local IP address override',
@@ -197,51 +304,16 @@ module.exports = function (app) {
     start(options) {
       const ip = (options.ip && options.ip.trim()) || getLocalIp();
       const port = options.port || 8080;
-      const serverPort = getServerPort(options);
+      const serverPort = getServerPort(app, options);
       const skToken = (options.skToken || '').trim();
 
       const serverUrl = `http://${ip}:${port}`;
       // Everything is proxied to the local Signal K server, which serves all webapps.
       const targetParsed = new URL(`http://127.0.0.1:${serverPort}`);
 
-      const apps = (options.apps || [])
-        .filter((a) => a && a.enabled !== false && a.url)
-        .map((a) => {
-          const appPath = a.url.startsWith('/') ? a.url : `/${a.url}`;
-          const tileUrl = `${serverUrl}${appPath}`;
-          let iconUrl;
-          if (a.icon && /^https?:\/\//.test(a.icon)) {
-            iconUrl = a.icon;
-          } else if (a.icon) {
-            iconUrl = `${serverUrl}${a.icon.startsWith('/') ? a.icon : `/${a.icon}`}`;
-          } else if (FALLBACK_ICON) {
-            iconUrl = `${serverUrl}${FALLBACK_ICON_ROUTE}`;
-          } else {
-            iconUrl = tileUrl;
-          }
-          return {
-            label: a.label || appPath,
-            description: a.description || '',
-            tileUrl,
-            iconUrl,
-          };
-        });
-
-      const buildAnnouncement = (app2) => JSON.stringify({
-        Version: '1',
-        Source: 'signalk-navico-embedder',
-        IP: ip,
-        FeatureName: app2.label,
-        Text: [{ Language: 'en', Name: app2.label, Description: app2.description }],
-        Icon: app2.iconUrl,
-        URL: app2.tileUrl,
-        OnlyShowOnClientIP: 'true',
-        BrowserPanel: {
-          Enable: true,
-          ProgressBarEnable: true,
-          MenuText: [{ Language: 'en', Name: app2.label }],
-        },
-      });
+      // The tiles announced over UDP and the webapp list published as a delta are
+      // both derived from the saved options — see buildAppModel.
+      const { mode, enabledApps, apps, webapps } = buildAppModel(options, ip, port);
 
       const publish = () => {
         if (apps.length === 0) return;
@@ -252,7 +324,7 @@ module.exports = function (app) {
             if (--pending <= 0) socket.close();
           };
           for (const app2 of apps) {
-            socket.send(buildAnnouncement(app2), PUBLISH_PORT, MULTICAST_GROUP, (err) => {
+            socket.send(buildAnnouncement(ip, app2), PUBLISH_PORT, MULTICAST_GROUP, (err) => {
               if (err) {
                 app.error(`Multicast send error: ${err.message}`);
               } else {
@@ -437,13 +509,30 @@ module.exports = function (app) {
       });
 
       server.listen(port, '0.0.0.0', () => {
-        if (apps.length === 0) {
+        if (mode === 'launcher') {
+          app.setPluginStatus(
+            `Announcing app launcher to MFD via ${serverUrl} `
+            + `(${enabledApps.length} app(s) available, IP: ${ip})`,
+          );
+        } else if (apps.length === 0) {
           app.setPluginStatus(`Proxy listening on ${serverUrl} — no apps configured yet (use Discover)`);
         } else {
           app.setPluginStatus(`Announcing ${apps.length} tile(s) to MFD via ${serverUrl} (IP: ${ip})`);
         }
         app.debug(`Proxy listening on ${serverUrl}, forwarding to ${targetParsed.origin}`);
       });
+
+      // Publish the enabled-app list to the data model so the standalone
+      // app-chooser webapp can fetch it (works for unauthenticated clients when
+      // read-only access is enabled, and through the proxy with token injection).
+      app.handleMessage('signalk-navico-embedder', {
+        updates: [
+          {
+            values: [{ path: 'plugins.signalk-navico-embedder.webapps', value: webapps }],
+          },
+        ],
+      });
+      app.debug(`Published ${webapps.length} webapp(s) to plugins.signalk-navico-embedder.webapps`);
 
       publish();
       publishInterval = setInterval(publish, PUBLISH_INTERVAL);
@@ -461,4 +550,15 @@ module.exports = function (app) {
       app.setPluginStatus('Stopped');
     },
   };
+};
+
+// Pure helpers exposed for the test suite. Not part of the Signal K plugin API;
+// the server only ever calls the factory function exported above.
+module.exports.internal = {
+  getLocalIp,
+  getServerPort,
+  buildAnnouncement,
+  buildAppModel,
+  FALLBACK_ICON_ROUTE,
+  LAUNCHER_PATH,
 };

@@ -1,28 +1,434 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Navico MFD Embedder</title>
-    <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: #1a1a2e;
-        color: #e0e0e0;
-        padding: 32px;
-        line-height: 1.5;
+
+<head>
+  <meta charset="UTF-8" />
+  <!-- Lock the viewport: this runs full-screen on a fixed MFD touchscreen, so
+       pinch / double-tap zoom would only break the layout. -->
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>SignalK Webapps</title>
+  <style>
+    /* Dark is the default (matches the MFD's night mode and JS-disabled fallback). */
+    :root {
+      color-scheme: dark;
+      --bg: #1a1a2e;
+      --fg: #e0e0e0;
+      --link: #3b82f6;
+      --accent: #3b82f6;
+      --muted: #9aa0b4;
+      --tile-bg: #24243e;
+      --border: #33334d;
+      --tile-hover-bg: #2e2e52;
+      --icon-bg: #3b3b5c;
+      --icon-fg: #cdd2e6;
+      --error: #f87171;
+      --debug-h2: #888;
+      --debug-cell-border: #2a2a44;
+      --debug-td: #d8dcea;
+    }
+
+    /* Light theme: applied when the page is opened with ?mode=day (or any
+       non-night mode). The class is set by an inline head script before paint. */
+    :root.light {
+      color-scheme: light;
+      --bg: #f4f5f7;
+      --fg: #1c1f2b;
+      --link: #2563eb;
+      --accent: #2563eb;
+      --muted: #5b6172;
+      --tile-bg: #ffffff;
+      --border: #d6dae3;
+      --tile-hover-bg: #eef1f6;
+      --icon-bg: #e3e7ef;
+      --icon-fg: #4a4f63;
+      --error: #dc2626;
+      --debug-h2: #6b7280;
+      --debug-cell-border: #e3e5ec;
+      --debug-td: #3a3f52;
+    }
+
+    /* Kiosk touch hardening for the MFD's embedded browser: stop the page from
+       zooming, overscroll-bouncing / pull-to-refresh, auto-inflating text, or
+       selecting text and showing long-press menus on touch. */
+    html,
+    body {
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
+    * {
+      box-sizing: border-box;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.5;
+    }
+
+    a {
+      color: var(--link);
+      text-decoration: none;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 0 0 24px;
+      cursor: pointer;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .tile {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      padding: 14px;
+      background: var(--tile-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--fg);
+      text-align: left;
+      transition:
+        background 0.15s,
+        border-color 0.15s,
+        transform 0.1s;
+    }
+
+    .tile:hover,
+    .tile:focus {
+      background: var(--tile-hover-bg);
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .tile:active {
+      transform: scale(0.97);
+    }
+
+    .tile .icon {
+      width: 96px;
+      height: 96px;
+      flex-shrink: 0;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--icon-bg);
+      overflow: hidden;
+      font-size: 36px;
+      font-weight: 600;
+      color: var(--icon-fg);
+      margin-right: 14px;
+    }
+
+    .tile .icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 16px;
+    }
+
+    .tile .text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .tile .title {
+      font-size: 15px;
+      font-weight: 600;
+      word-break: break-word;
+    }
+
+    .tile .description {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+      word-break: break-word;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      overflow: hidden;
+    }
+
+    .message {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 24px 0;
+    }
+
+    .message.error {
+      color: var(--error);
+    }
+
+    .debug {
+      margin-top: 40px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+
+    .debug h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--debug-h2);
+      margin: 0 0 12px;
+    }
+
+    .debug table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .debug th,
+    .debug td {
+      text-align: left;
+      vertical-align: top;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--debug-cell-border);
+      word-break: break-all;
+    }
+
+    .debug th {
+      color: var(--muted);
+      font-weight: 500;
+      width: 170px;
+      white-space: nowrap;
+    }
+
+    .debug td {
+      color: var(--debug-td);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+  </style>
+
+  <!--
+      Pick the day/night theme as early as possible (before first paint) so the
+      page doesn't flash the wrong colors. The Navico MFD passes its display mode
+      via ?mode=night|day; when no mode is given we follow the browser's
+      prefers-color-scheme (falling back to dark).
+      Kept ES5-style for the MFD's old embedded Chromium (no ?. / ??).
+    -->
+  <script>
+    (function () {
+      var m = location.search.match(/[?&]mode=([^&]*)/);
+      var mode = m ? decodeURIComponent(m[1]) : null;
+      var theme = 'dark';
+      if (mode !== null) {
+        theme = mode === 'night' ? 'dark' : 'light';
+      } else if (
+        window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: light)').matches
+      ) {
+        theme = 'light';
       }
-      a {
-        color: #3b82f6;
+      document.documentElement.className = theme;
+    })();
+  </script>
+</head>
+
+<body>
+  <h1 id="title" title="Click to toggle debug information">SignalK Webapps</h1>
+
+  <div id="apps" class="grid"></div>
+  <div id="message" class="message">Loading apps…</div>
+
+  <div id="debugSection" class="debug" style="display: none">
+    <h2>Debug information</h2>
+    <table id="debug"></table>
+  </div>
+
+  <!--
+      Conservative ES5-style script: this page is also served through the proxy to
+      the MFD's old embedded Chromium (Chrome ~60-72), so avoid optional chaining
+      (?.) and nullish coalescing (??). The proxy injects the runtime polyfills.
+    -->
+  <script>
+    (function () {
+      var WEBAPPS_URL =
+        '/signalk/v1/api/vessels/self/plugins/signalk-navico-embedder/webapps';
+
+      function initials(name) {
+        var s = (name || '??').replace(/^\//, '').trim();
+        return (s || '??').slice(0, 2).toUpperCase();
       }
-    </style>
-  </head>
-  <body>
-    <h1>Navico MFD Embedder</h1>
-    <p>
-      This plugin has no standalone UI. Configure it from
-      <a href="/admin/#/serverConfiguration/plugins/signalk-navico-embedder">Server → Plugin Config → Navico MFD Embedder</a>,
-      where the embedded configurator lets you discover installed webapps and choose which to announce as tiles on your MFD.
-    </p>
-  </body>
+
+      // Forward this page's query string (e.g. ?darkMode=true) verbatim to each
+      // webapp so the MFD's settings reach the embedded app unchanged.
+      function appendQuery(url, search) {
+        var query = search && search.charAt(0) === '?' ? search.slice(1) : search;
+        if (!query) return url;
+        // Keep the query before any hash fragment (e.g. /app#/page).
+        var hash = '';
+        var hashIndex = url.indexOf('#');
+        if (hashIndex !== -1) {
+          hash = url.slice(hashIndex);
+          url = url.slice(0, hashIndex);
+        }
+        var sep = url.indexOf('?') === -1 ? '?' : '&';
+        return url + sep + query + hash;
+      }
+
+      function makeTile(info) {
+        var a = document.createElement('a');
+        a.className = 'tile';
+        a.href = info.url ? appendQuery(info.url, location.search) : '#';
+
+        var icon = document.createElement('div');
+        icon.className = 'icon';
+        if (info.icon) {
+          var img = document.createElement('img');
+          img.src = info.icon;
+          img.onerror = function () {
+            if (img.parentNode === icon) icon.removeChild(img);
+            icon.textContent = initials(info.name || info.url);
+          };
+          icon.appendChild(img);
+        } else {
+          icon.textContent = initials(info.name || info.url);
+        }
+
+        var text = document.createElement('div');
+        text.className = 'text';
+
+        var title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = info.name || info.url || 'App';
+        text.appendChild(title);
+
+        if (info.description) {
+          var desc = document.createElement('div');
+          desc.className = 'description';
+          desc.textContent = info.description;
+          text.appendChild(desc);
+        }
+
+        a.appendChild(icon);
+        a.appendChild(text);
+        return a;
+      }
+
+      function setMessage(text, isError) {
+        var msg = document.getElementById('message');
+        msg.textContent = text;
+        msg.className = isError ? 'message error' : 'message';
+        msg.style.display = text ? '' : 'none';
+      }
+
+      function renderApps(list) {
+        var grid = document.getElementById('apps');
+        grid.innerHTML = '';
+        if (!list || list.length === 0) {
+          setMessage(
+            'No web apps are enabled. Add them in Server → Plugin Config → Navico MFD Embedder.',
+            false
+          );
+          return;
+        }
+        setMessage('', false);
+        for (var i = 0; i < list.length; i++) {
+          grid.appendChild(makeTile(list[i]));
+        }
+      }
+
+      function loadApps() {
+        fetch(WEBAPPS_URL, { headers: { Accept: 'application/json' } })
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            // The REST API wraps leaf values: { value: [...], timestamp, $source }.
+            var list = data;
+            if (data && !Array.isArray(data) && data.value) list = data.value;
+            if (!Array.isArray(list)) list = [];
+            renderApps(list);
+          })
+          .catch(function (err) {
+            setMessage('Could not load app list: ' + err.message, true);
+          });
+      }
+
+      function addRow(table, label, value) {
+        var tr = document.createElement('tr');
+        var th = document.createElement('th');
+        th.textContent = label;
+        var td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(th);
+        tr.appendChild(td);
+        table.appendChild(tr);
+      }
+
+      function renderDebug() {
+        var table = document.getElementById('debug');
+
+        addRow(table, 'User agent', navigator.userAgent);
+        addRow(table, 'Page URL', location.href);
+
+        var qs = location.search ? location.search.replace(/^\?/, '') : '(none)';
+        addRow(table, 'Query string', qs);
+        if (location.search && typeof URLSearchParams === 'function') {
+          var params = new URLSearchParams(location.search);
+          params.forEach(function (value, key) {
+            addRow(table, ' ' + key, value);
+          });
+        }
+
+        addRow(table, 'Referrer', document.referrer || '(none)');
+        addRow(table, 'Window size', window.innerWidth + ' × ' + window.innerHeight);
+        addRow(table, 'Screen size', screen.width + ' × ' + screen.height);
+        addRow(table, 'Device pixel ratio', String(window.devicePixelRatio || 1));
+        addRow(table, 'Language', navigator.language || '(unknown)');
+        addRow(table, 'Online', String(navigator.onLine));
+        addRow(table, 'Cookies enabled', String(navigator.cookieEnabled));
+      }
+
+      function setupDebugToggle() {
+        var title = document.getElementById('title');
+        var section = document.getElementById('debugSection');
+        title.addEventListener('click', function () {
+          section.style.display = section.style.display === 'none' ? '' : 'none';
+        });
+      }
+
+      // Kiosk hardening: suppress the long-press context menu (CSS touch-callout
+      // only covers iOS; Android Chromium still pops one up for links/images).
+      function setupKioskGuards() {
+        document.addEventListener('contextmenu', function (e) {
+          e.preventDefault();
+        });
+      }
+
+      setupKioskGuards();
+      renderDebug();
+      setupDebugToggle();
+      loadApps();
+    })();
+  </script>
+</body>
+
 </html>
