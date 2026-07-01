@@ -45,7 +45,7 @@
     "node": ">=20.19"
   },
   "signalk": {
-    "displayName": "Navico MFD Embedder",
+    "displayName": "Navico MFD Embedder ",
     "appIcon": "icon.png",
     "recommends": [
       "hoekens-anchor-alarm",
@@ -53,7 +53,9 @@
       "signalk-sailsense"
     ],
     "screenshots": [
-      "./screenshots/screenshot_home.png"
+      "./screenshots/tides.png",
+      "./screenshots/sailsense.png",
+      "./screenshots/instrument_panel.png"
     ]
   },
   "repository": {
