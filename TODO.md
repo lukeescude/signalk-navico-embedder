@@ -4,8 +4,6 @@
   * main signalk
   * Kip
   * Freeboard
-  * Instrument Panel
-  * tides
   * signalk-weather-map
   * ???
 * add screenshots

@@ -238,6 +238,29 @@ test('transpiles modern JavaScript for the MFD old Chromium', async () => {
   }
 });
 
+test('downlevels modern CSS for the MFD old Chromium', async () => {
+  const source = '@layer base { h1 { color: oklch(0.7 0.15 30); } }';
+  const ctx = await setup({
+    handler: (req, res) => {
+      res.writeHead(200, { 'content-type': 'text/css' });
+      res.end(source);
+    },
+  });
+  try {
+    const res = await ctx.get('/bundle.css');
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'], /css/);
+    assert.ok(res.body.includes('h1'), 'rules preserved');
+    // @layer is unsupported and dropped wholesale by the target Chromium, which
+    // would silently delete the reset/base styles wrapped in it; must be unwrapped.
+    assert.ok(!res.body.includes('@layer'), 'cascade layer unwrapped');
+    // oklch() is unsupported; an rgb() fallback must be emitted ahead of it.
+    assert.match(res.body, /rgb\(/i, 'oklch color has an rgb fallback');
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test('strips framing headers from the proxied response', async () => {
   const ctx = await setup({
     handler: (req, res) => {

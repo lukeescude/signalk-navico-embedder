@@ -4,6 +4,9 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const esbuild = require('esbuild');
+const postcss = require('postcss');
+const postcssPresetEnv = require('postcss-preset-env');
+const valueParser = require('postcss-value-parser');
 
 const PUBLISH_PORT = 2053;
 const MULTICAST_GROUP = '239.2.1.1';
@@ -35,6 +38,46 @@ const STRIP_REQUEST_HEADERS = new Set([
   'if-range',
   'accept-encoding',
 ]);
+
+// postcss-preset-env has no fallback for the CSS min()/max() value functions
+// (unsupported before Chrome 79) because there's no way to statically know which
+// argument wins — it depends on the actual viewport at runtime. Tailwind's own
+// convention is min(<viewport-relative>, <fixed cap>), e.g. width: min(92vw, 900px)
+// for a dialog that should never overflow a small screen. Old Chromium treats the
+// whole declaration as invalid and drops it, leaving no width at all — collapsing
+// layouts that depend on it. Emitting the first argument alone as a same-property
+// fallback keeps the "don't overflow" behavior (the one that matters on a small MFD
+// screen) at the cost of the upper/lower cap on larger ones.
+function minMaxFallbackPlugin() {
+  return {
+    postcssPlugin: 'mfd-min-max-fallback',
+    Declaration(decl) {
+      const trimmed = decl.value.trim();
+      if (!/^(min|max)\(/i.test(trimmed) || !trimmed.endsWith(')')) return;
+      const parsed = valueParser(trimmed);
+      // Only handle a value that is a single min()/max() call — anything more
+      // complex (e.g. multiple functions in a grid-template-columns list) is left
+      // alone rather than risk an incorrect partial fallback.
+      if (parsed.nodes.length !== 1 || parsed.nodes[0].type !== 'function') return;
+      const firstArgNodes = [];
+      for (const node of parsed.nodes[0].nodes) {
+        if (node.type === 'div' && node.value === ',') break;
+        firstArgNodes.push(node);
+      }
+      const fallback = valueParser.stringify(firstArgNodes).trim();
+      if (!fallback) return;
+      decl.cloneBefore({ value: fallback });
+    },
+  };
+}
+minMaxFallbackPlugin.postcss = true;
+
+// Downlevels modern CSS (cascade layers, oklch/color-mix, :is()) that apps built
+// with current tooling (e.g. Tailwind v4) emit but the MFD's old Chromium can't
+// parse. Unrecognized at-rules like @layer are dropped wholesale by old browsers,
+// which silently deletes an app's reset/base styles — seen as huge default-UA-styled
+// headings on the MFD even though the same page looks fine in a modern browser.
+const cssProcessor = postcss([minMaxFallbackPlugin(), postcssPresetEnv({ browsers: 'Chrome >= 70' })]);
 
 // Polyfills for APIs missing in the MFD's embedded Chromium (< Chrome 73).
 const POLYFILLS_SCRIPT = `<script>
@@ -402,6 +445,24 @@ module.exports = function (app) {
                 app.debug(`  Transpiled ${req.url} (${source.length} -> ${result.code.length} bytes)`);
               } catch (err) {
                 app.error(`  esbuild failed for ${req.url}: ${err.message}`);
+                delete headers['content-length'];
+                res.writeHead(proxyRes.statusCode, headers);
+                res.end(source);
+              }
+            });
+          } else if (contentType.includes('text/css')) {
+            const chunks = [];
+            proxyRes.on('data', (chunk) => chunks.push(chunk));
+            proxyRes.on('end', async () => {
+              const source = Buffer.concat(chunks).toString('utf8');
+              try {
+                const result = await cssProcessor.process(source, { from: undefined });
+                delete headers['content-length'];
+                res.writeHead(proxyRes.statusCode, headers);
+                res.end(result.css);
+                app.debug(`  Downleveled CSS ${req.url} (${source.length} -> ${result.css.length} bytes)`);
+              } catch (err) {
+                app.error(`  postcss failed for ${req.url}: ${err.message}`);
                 delete headers['content-length'];
                 res.writeHead(proxyRes.statusCode, headers);
                 res.end(source);

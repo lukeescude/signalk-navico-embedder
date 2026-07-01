@@ -1,6 +1,6 @@
 {
   "name": "signalk-navico-embedder",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Embeds a URL as a webapp tile on B&G/Navico MFDs via UDP multicast announcement",
   "main": "index.js",
   "scripts": {
@@ -61,7 +61,10 @@
     "url": "https://github.com/lukeescude/signalk-navico-embedder.git"
   },
   "dependencies": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "postcss": "^8.5.16",
+    "postcss-preset-env": "^11.3.2",
+    "postcss-value-parser": "^4.2.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
