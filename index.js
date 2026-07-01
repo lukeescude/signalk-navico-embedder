@@ -395,7 +395,7 @@ module.exports = function (app) {
             proxyRes.on('end', async () => {
               const source = Buffer.concat(chunks).toString('utf8');
               try {
-                const result = await esbuild.transform(source, { target: 'chrome70', loader: 'js' });
+                const result = await esbuild.transform(source, { target: 'chrome70', loader: 'js', minify: true });
                 delete headers['content-length'];
                 res.writeHead(proxyRes.statusCode, headers);
                 res.end(result.code);
