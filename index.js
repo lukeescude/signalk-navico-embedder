@@ -116,10 +116,10 @@ function getLocalIp() {
   return '127.0.0.1';
 }
 
-// The bundled fallback icon, resolved once at load time.
+// The bundled fallback icon (shipped under public/), resolved once at load time.
 const FALLBACK_ICON = [
-  { file: 'icon.ico', mime: 'image/x-icon' },
-  { file: 'icon.png', mime: 'image/png' },
+  { file: path.join('public', 'icon.ico'), mime: 'image/x-icon' },
+  { file: path.join('public', 'icon.png'), mime: 'image/png' },
 ].find((i) => {
   try {
     fs.accessSync(path.join(__dirname, i.file));

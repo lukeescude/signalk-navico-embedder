@@ -8,3 +8,5 @@ node_modules
 # index.html is hand-authored source, so keep it.
 /public/*
 !/public/index.html
+!/public/icon.ico
+!/public/icon.png
