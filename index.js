@@ -424,7 +424,7 @@ module.exports = function (app) {
         req.pipe(proxyReq);
       });
 
-      server.on('upgrade', (req, socket) => {
+      server.on('upgrade', (req, socket, reqHead) => {
         // Disable Nagle on the MFD socket immediately — small WS packets should
         // not be buffered; without this the upgrade handshake itself can be delayed.
         socket.setNoDelay(true);
@@ -471,7 +471,7 @@ module.exports = function (app) {
           proxyReq.destroy();
         });
 
-        proxyReq.on('upgrade', (proxyRes, proxySocket) => {
+        proxyReq.on('upgrade', (proxyRes, proxySocket, resHead) => {
           clearTimeout(upgradeTimer);
           proxySocket.setNoDelay(true);
 
@@ -491,6 +491,13 @@ module.exports = function (app) {
             '\r\n',
           ].join('\r\n');
           socket.write(responseHead);
+          // Node's HTTP parser hands back any upstream bytes it already read past the
+          // 101 response headers (e.g. the first WS frame, when SK writes it fast enough
+          // to land in the same TCP read as the handshake) via this `head` buffer rather
+          // than a later 'data' event. Forwarding it before piping avoids silently
+          // dropping that frame — which was intermittently eating the initial "hello".
+          if (resHead && resHead.length) socket.write(resHead);
+          if (reqHead && reqHead.length) proxySocket.write(reqHead);
           proxySocket.pipe(socket);
           socket.pipe(proxySocket);
           // Cross-link both error and close so either side tearing down cleans up the other.
