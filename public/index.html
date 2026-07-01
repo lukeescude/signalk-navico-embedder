@@ -200,28 +200,28 @@
     .debug table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 12px;
+      font-size: 16px;
     }
 
     .debug th,
     .debug td {
       text-align: left;
       vertical-align: top;
-      padding: 4px 8px;
+      padding: 2px 8px;
       border-bottom: 1px solid var(--debug-cell-border);
       word-break: break-all;
     }
 
     .debug th {
       color: var(--muted);
-      font-weight: 500;
+      font-weight: 700;
       width: 170px;
       white-space: nowrap;
     }
 
     .debug td {
       color: var(--debug-td);
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 700;
     }
   </style>
 
@@ -387,10 +387,9 @@
         var table = document.getElementById('debug');
 
         addRow(table, 'User agent', navigator.userAgent);
-        addRow(table, 'Page URL', location.href);
 
         var qs = location.search ? location.search.replace(/^\?/, '') : '(none)';
-        addRow(table, 'Query string', qs);
+        addRow(table, 'Query string', '');
         if (location.search && typeof URLSearchParams === 'function') {
           var params = new URLSearchParams(location.search);
           params.forEach(function (value, key) {
@@ -398,7 +397,6 @@
           });
         }
 
-        addRow(table, 'Referrer', document.referrer || '(none)');
         addRow(table, 'Window size', window.innerWidth + ' × ' + window.innerHeight);
         addRow(table, 'Screen size', screen.width + ' × ' + screen.height);
         addRow(table, 'Device pixel ratio', String(window.devicePixelRatio || 1));

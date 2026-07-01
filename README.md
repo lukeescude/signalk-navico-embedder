@@ -91,6 +91,27 @@ When a token is configured the proxy:
 
 This means the token only needs to be stored once (in the plugin config) and works transparently for all proxied apps.
 
+## Verified Hardware
+
+| MFD Model    | Browser      |
+| ------------ | ------------ |
+| Zeus 3S 9    | Chromium 69  |
+| Zeus 3S 12   | Chromium 69  |
+| Zeus 3S 16   | Chromium 69  |
+
+
+## Testers Wanted
+
+If you run a Navico MFD (B&G, Simrad, Lowrance) we would love your help testing this plugin with both older and newer plotters.
+
+For testing, install it from the app store and set `MFD display mode` to `Launcher` in the config.
+
+Then, open the *SignalK Webapps* icon on your MFD.  If it doesnt show up, that's useful to know as well.  Please add an issue with your MFD make/model and we can try to find out a way to get it working.
+
+Once it loads, click on the "Signalk Webapps" header to show the hidden debug information.  You can take a screenshot of the mfd by pressing `Power` and `Pages` (9 squares) which will save to your SD card.  You can also take a screenshot from the phone app or just a photo of the screen.
+
+From there, please add it as an issue on our tracker: https://github.com/lukeescude/signalk-navico-embedder
+
 ## How the B&G/Navico MFD webapp tile protocol works
 
 Discovered by reverse-engineering [signalk-mfd-plugin](https://github.com/htool/signalk-mfd-plugin).
