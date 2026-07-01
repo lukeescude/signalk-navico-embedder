@@ -6,7 +6,7 @@ A SignalK plugin that presents your installed Signal K web apps as webapp tiles 
 
 1. Runs an HTTP reverse proxy that forwards requests to the local Signal K server
 2. Broadcasts UDP multicast announcements that tell the MFD to show a tile for each selected web app
-3. Patches the proxied HTML and JS to be compatible with the MFD's old Chromium browser
+3. Patches the proxied HTML, JS, and CSS to be compatible with the MFD's old Chromium browser
 
 The embedded configurator can **auto-detect installed Signal K webapps**, so you just click _Discover_ and enable the ones you want on the MFD.
 
@@ -158,11 +158,11 @@ If the target gzip-compresses HTML, string replacements corrupt the data.
 
 ## MFD browser limitations (Zeus3S 12 / NavStation)
 
-The B&G Zeus3S 12 runs an **embedded Chromium somewhere in the Chrome 60–72 range**. This plugin fixes two categories of issues:
+The B&G Zeus3S 12 runs an **embedded Chromium somewhere in the Chrome 60–72 range**. This plugin fixes three categories of issues:
 
 ### Syntax issues — fixed with esbuild transpilation
 
-Modern JavaScript build tools output ES2020+ syntax. The MFD's Chromium doesn't support optional chaining (`?.`) or nullish coalescing (`??`). All `application/javascript` responses are transpiled to `chrome70` target via esbuild.
+Modern JavaScript build tools output ES2020+ syntax. The MFD's Chromium doesn't support optional chaining (`?.`) or nullish coalescing (`??`). All `application/javascript` responses are transpiled and minified to `chrome70` target via esbuild — minification matters here because the unminified transpiled output can be meaningfully larger than the original bundle, and the MFD's hardware is slow enough that the extra parse/download weight is noticeable.
 
 ### Missing runtime APIs — fixed with injected polyfills
 
@@ -180,6 +180,28 @@ These APIs are polyfilled by injecting a `<script>` into every HTML response:
 | `globalThis`                       | 71             |
 | `queueMicrotask`                   | 71             |
 
+### CSS issues — fixed with PostCSS downleveling
+
+Apps built with current tooling (e.g. Tailwind v4) emit CSS the MFD's Chromium can't
+parse: cascade layers (`@layer`), `oklch()`/`color-mix()` colors, and `:is()`. All
+`text/css` responses are run through `postcss-preset-env` targeting `Chrome >= 70`,
+which matters more than it sounds — unrecognized at-rules like `@layer` are dropped
+**wholesale** by old browsers, including everything inside them. Since apps commonly
+wrap their entire reset/base stylesheet in `@layer base { ... }`, losing that layer
+silently deletes the reset, which shows up as huge default-browser-styled headings and
+wrong text colors on the MFD even though the same page looks fine in a modern browser.
+
+One thing `postcss-preset-env` can't fix: the CSS `min()`/`max()` value functions
+(unsupported before Chrome 79) have no static fallback, because which argument wins
+depends on the actual runtime viewport. A small custom PostCSS plugin in `index.js`
+handles the common case — Tailwind's own convention is
+`min(<viewport-relative>, <fixed cap>)`, e.g. `width: min(92vw, 900px)` for a dialog
+that shouldn't overflow a small screen — by emitting the first argument as a
+same-property fallback. Old Chromium keeps that fallback and ignores the invalid
+`min()`/`max()` line; modern browsers do the reverse. This trades away the upper/lower
+cap on large screens to guarantee the layout never overflows a small MFD screen, which
+matters more here.
+
 ## Proxy behaviour summary
 
 | Request/Response                      | What the proxy does                                                                      |
@@ -190,7 +212,8 @@ These APIs are polyfilled by injecting a `<script>` into every HTML response:
 | `Content-Security-Policy` in response | Stripped                                                                                 |
 | `Location` redirect headers           | Rewritten from target origin to proxy origin                                             |
 | HTML responses                        | Polyfill `<script>` injected before `</head>`; `window.SK_TOKEN` set if token configured |
-| JavaScript responses                  | Transpiled via esbuild to `chrome70` target                                              |
+| JavaScript responses                  | Transpiled and minified via esbuild to `chrome70` target                                 |
+| CSS responses                         | Downleveled via `postcss-preset-env` to `chrome70` target (see above)                    |
 | WebSocket upgrades                    | Forwarded to target; `Authorization` header and `?token=` appended if token configured   |
 | All HTTP requests (if token set)      | `Authorization: Bearer <token>` header added                                             |
 
@@ -207,12 +230,40 @@ npm run build:config
 The backend plugin ([`index.js`](index.js)) is plain CommonJS and needs no build step.
 `npm run prepublishOnly` rebuilds the configurator automatically before publishing.
 
+### Testing against the MFD's actual browser
+
+A modern browser will not reproduce most MFD-specific bugs — the whole point of this
+plugin is compatibility with a Chromium from roughly 2018. When a fix needs verifying
+against the real thing rather than guesswork, download the matching historical
+Chromium build straight from Google's snapshot archive and drive it over the DevTools
+protocol:
+
+```bash
+# Find the Chromium revision for a given Chrome milestone, e.g. 70:
+curl -s "https://chromiumdash.appspot.com/fetch_milestones?mstone=70" | grep chromium_main_branch_position
+
+# Download and unzip the matching build (Mac example; Linux/Win paths also exist):
+curl -o chrome-mac.zip "https://commondatastorage.googleapis.com/chromium-browser-snapshots/Mac/<revision>/chrome-mac.zip"
+unzip chrome-mac.zip
+
+# Launch headless with remote debugging (on Apple Silicon this runs fine under Rosetta):
+./chrome-mac/Chromium.app/Contents/MacOS/Chromium \
+  --headless --disable-gpu --no-sandbox \
+  --remote-debugging-port=9333 --user-data-dir=/tmp/chrome70profile about:blank
+```
+
+From there, the `chrome-remote-interface` npm package can navigate, click/tap, and read
+console exceptions directly from that exact browser — modern tools like Playwright
+generally can't drive a CDP endpoint this old, since the protocol has moved on since
+2018. This is how the WebSocket proxy, esbuild minification, and CSS downleveling fixes
+in this codebase were verified.
+
 ### Tests
 
-The plugin has a test suite built on Node's built-in test runner (no extra
+The plugin has a test suite built on Node's built-in test runner (no extra test-framework
 dependencies). It covers the config-to-announcement transforms and the proxy's
-runtime behaviour — header rewriting, HTML/token injection, JS transpilation,
-the fallback-icon route, and the start/stop lifecycle (UDP is stubbed, so no
+runtime behaviour — header rewriting, HTML/token injection, JS transpilation, CSS
+downleveling, the fallback-icon route, and the start/stop lifecycle (UDP is stubbed, so no
 multicast traffic is emitted):
 
 ```bash
