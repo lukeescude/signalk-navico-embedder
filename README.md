@@ -106,6 +106,7 @@ This means the token only needs to be stored once (in the plugin config) and wor
 | ✅       | [hoekens-anchor-alarm](https://www.npmjs.com/package/hoekens-anchor-alarm) |       |
 | ✅       | [signalk-watch-schedule](https://www.npmjs.com/package/signalk-watch-schedule) |       |
 | ✅       | [signalk-sailsense](https://www.npmjs.com/package/signalk-sailsense)       |       |
+| ⚠️       | SignalK Admin                                                              | Works, but is extremely slow |
 
 
 ## Testers Wanted
