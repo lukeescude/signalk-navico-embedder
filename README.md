@@ -98,6 +98,7 @@ This means the token only needs to be stored once (in the plugin config) and wor
 | ✅       | B&G  | Zeus 3S 9    | Chromium 69  |
 | ✅       | B&G  | Zeus 3S 12   | Chromium 69  |
 | ✅       | B&G  | Zeus 3S 16   | Chromium 69  |
+| ✅       | B&G  | Zeus 3 12   | Chromium 69  |
 
 ## Verified Plugins
 
