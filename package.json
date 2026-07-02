@@ -53,9 +53,12 @@
       "signalk-sailsense"
     ],
     "screenshots": [
-      "./screenshots/tides.png",
+      "./screenshots/home-screen.png",
+      "./screenshots/launcher.png",
       "./screenshots/sailsense.png",
-      "./screenshots/instrument_panel.png"
+      "./screenshots/anchor-alarm.png",
+      "./screenshots/watch-scheduler.png",
+      "./screenshots/tides.png"
     ]
   },
   "repository": {
