@@ -234,7 +234,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
         .filter((w) => w.name !== 'signalk-navico-embedder')
         .map((w) => {
           if (w.name === '@signalk/server-admin-ui') {
-            return { name: w.name, label: 'Settings', url: '/admin/', icon: '', description: '' }
+            return { name: w.name, label: 'SignalK Admin', url: '/admin/', icon: '/signalk-navico-embedder/signalk-logo.png', description: 'SignalK Admin' }
           }
           return {
             name: w.name,
