@@ -338,6 +338,13 @@ module.exports = function (app) {
               url: { type: 'string', title: 'URL', description: 'Path of the web app (e.g. /@signalk/freeboard-sk/).' },
               label: { type: 'string', title: 'Name', description: 'Name shown on the MFD tile.' },
               description: { type: 'string', title: 'Description', description: 'Description shown on the MFD tile.' },
+              icon: {
+                type: 'string',
+                title: 'Icon',
+                description:
+                  'Icon shown on the MFD tile — a server-relative path (e.g. /@signalk/freeboard-sk/icon.png) '
+                  + 'or an absolute http(s) URL. Set automatically by Discover; leave blank to use the default icon.',
+              },
             },
           },
         },

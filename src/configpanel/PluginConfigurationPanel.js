@@ -115,12 +115,12 @@ function IconPreview({ icon, label }) {
   return <div style={S.iconBox}>{iconVal || (label || '??').slice(0, 2).toUpperCase()}</div>
 }
 
-function TextField({ label, value, onChange, hint, placeholder }) {
+function TextField({ label, value, onChange, hint, placeholder, width }) {
   return (
     <div style={S.fieldRow}>
       <span style={S.label}>{label}</span>
       <input
-        style={{ ...S.input, width: 240 }}
+        style={{ ...S.input, width: width || 240 }}
         type="text"
         value={value}
         placeholder={placeholder || ''}
@@ -169,6 +169,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   const [ip, setIp] = useState(cfg.ip || '')
   const [port, setPort] = useState(cfg.port || 8080)
   const [serverPort, setServerPort] = useState(cfg.serverPort || '')
+  const [skToken, setSkToken] = useState(cfg.skToken || '')
   const [apps, setApps] = useState(() => cfg.apps || [])
 
   const [status, setStatus] = useState('')
@@ -194,12 +195,12 @@ export default function PluginConfigurationPanel({ configuration, save }) {
       ip,
       port,
       ...(serverPort === '' ? {} : { serverPort }),
-      // Preserve the auth token; it has no field in this panel and would
-      // otherwise be wiped from the saved configuration.
-      ...(cfg.skToken ? { skToken: cfg.skToken } : {}),
+      // Omit the token entirely when blank so clearing the field clears the
+      // saved value; start() trims it again on load.
+      ...(skToken.trim() ? { skToken: skToken.trim() } : {}),
       apps: appsList
     }),
-    [mode, ip, port, serverPort, cfg.skToken]
+    [mode, ip, port, serverPort, skToken]
   )
 
   const doSave = useCallback(async () => {
@@ -344,6 +345,15 @@ export default function PluginConfigurationPanel({ configuration, save }) {
         onChange={setServerPort}
         placeholder="auto-detect"
         hint="Leave blank to auto-detect"
+      />
+
+      <TextField
+        label="Signal K auth token"
+        value={skToken}
+        onChange={setSkToken}
+        placeholder="Leave blank if not using authentication"
+        hint="JWT injected into proxied requests — see Authentication"
+        width={360}
       />
 
       <div style={S.sectionTitle}>Web Apps</div>

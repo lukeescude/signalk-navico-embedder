@@ -31,11 +31,12 @@ configurator that replaces the generic settings form:
    - **Launcher** — announce a single tile that opens the [app-chooser webapp](#app-chooser-webapp), from which all enabled apps can be launched. Keeps the MFD's tile list uncluttered when you have many apps.
 2. **Local IP address override** — leave blank to auto-detect. Set this if the machine has multiple network interfaces and the wrong one is selected.
 3. **Proxy port** — the HTTP port this proxy listens on (default: `8080`).
-4. **Signal K authentication token** — see [Authentication](#authentication) below.
-5. **Discover Installed Webapps** — scans the Signal K server for installed web apps and adds any new ones to the list below.
-6. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
+4. **Signal K server port** — leave blank to auto-detect (`PORT` env var, then the server's configured port, then `3000`). Set this only if the proxy cannot reach the Signal K server on the detected port.
+5. **Signal K authentication token** — see [Authentication](#authentication) below.
+6. **Discover Installed Webapps** — scans the Signal K server for installed web apps and adds any new ones to the list below.
+7. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
    - drag to reorder,
-   - edit the **name**, **description**, and **icon** shown on the tile,
+   - edit the **name** and **description** shown on the tile,
    - toggle **enabled** (disabled apps are kept in the list but not announced),
    - **remove** it entirely.
 
