@@ -80,13 +80,15 @@ In Signal K admin go to **Security** and toggle **Allow Read-Only Access**. This
 
 ### Option B — Inject a JWT token (more secure)
 
-1. Generate a token for the MFD using the **`signalk-generate-token` CLI** (see the [Signal K token docs](https://demo.signalk.org/documentation/Security/Generating_Tokens.html)). The token inherits the permissions of the user account it is generated against:
-   ```
-   signalk-generate-token -u <username> -e <time-to-live> -s ~/.signalk/security.json
-   ```
-   For example, `signalk-generate-token -u navico-mfd -e 1y -s ~/.signalk/security.json` creates a token valid for one year.
-2. Paste the token into **Plugin Config → Navico MFD Embedder → Signal K authentication token**.
-3. Save and restart the plugin.
+The quickest way is the **Generate Authentication Token** button in the plugin config panel. It submits a Signal K [access request](https://signalk.org/specification/1.8.2/doc/access_requests.html) on the plugin's behalf; approve it under **Security → Access Requests** in the admin UI (the panel links straight there) and the issued token is filled in for you. Then click **Save Configuration**.
+
+To generate a token manually instead, use the **`signalk-generate-token` CLI** (see the [Signal K token docs](https://demo.signalk.org/documentation/Security/Generating_Tokens.html)). The token inherits the permissions of the user account it is generated against:
+
+```
+signalk-generate-token -u <username> -e <time-to-live> -s ~/.signalk/security.json
+```
+
+For example, `signalk-generate-token -u navico-mfd -e 1y -s ~/.signalk/security.json` creates a token valid for one year. Paste the result into **Plugin Config → Navico MFD Embedder → Signal K authentication token**, then save and restart the plugin.
 
 When a token is configured the proxy:
 

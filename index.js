@@ -321,7 +321,7 @@ module.exports = function (app) {
         skToken: {
           type: 'string',
           title: 'Signal K authentication token',
-          description: 'JWT token injected into all proxied requests. Required when Signal K has authentication enabled and read-only access disabled (e.g. MFDs that have no session cookie). Generate a token in Signal K admin → Security, or enable Allow Read-Only Access instead.',
+          description: 'JWT token injected into all proxied requests. Required when Signal K has authentication enabled and read-only access disabled (e.g. MFDs that have no session cookie). Use the "Generate Authentication Token" button in the plugin config panel, or enable Allow Read-Only Access instead.',
         },
         apps: {
           type: 'array',

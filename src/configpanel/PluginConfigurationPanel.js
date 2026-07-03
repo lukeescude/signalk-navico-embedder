@@ -70,8 +70,11 @@ const S = {
   toggle: { flexShrink: 0, paddingTop: 8 },
   checkbox: { width: 16, height: 16, cursor: 'pointer', accentColor: '#3b82f6' },
   empty: { textAlign: 'center', padding: '30px 16px', color: '#999', fontSize: 13 },
-  fieldRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 },
-  label: { fontSize: 13, fontWeight: 500, color: '#555', width: 160, flexShrink: 0 },
+  fieldRow: { display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
+  label: { fontSize: 13, fontWeight: 500, color: '#555', width: 160, flexShrink: 0, paddingTop: 7 },
+  fieldBody: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 },
+  numberRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 },
+  numberLabel: { fontSize: 13, fontWeight: 500, color: '#555', width: 160, flexShrink: 0 },
   input: {
     padding: '6px 10px',
     borderRadius: 6,
@@ -92,7 +95,25 @@ const S = {
   },
   appInputName: { fontWeight: 600 },
   actions: { display: 'flex', gap: 10, alignItems: 'center', marginTop: 16 },
-  hint: { fontSize: 11, color: '#aaa', marginLeft: 8 }
+  hint: { fontSize: 11, color: '#aaa' },
+  link: { color: '#3b82f6', fontWeight: 600, textDecoration: 'none' }
+}
+
+function tokenStateColor(state) {
+  if (state === 'approved') return '#10b981'
+  if (state === 'denied' || state === 'error') return '#ef4444'
+  return '#3b82f6'
+}
+
+function uuidv4() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
 }
 
 function IconPreview({ icon, label }) {
@@ -115,26 +136,28 @@ function IconPreview({ icon, label }) {
   return <div style={S.iconBox}>{iconVal || (label || '??').slice(0, 2).toUpperCase()}</div>
 }
 
-function TextField({ label, value, onChange, hint, placeholder, width }) {
+function TextField({ label, value, onChange, hint, placeholder }) {
   return (
     <div style={S.fieldRow}>
       <span style={S.label}>{label}</span>
-      <input
-        style={{ ...S.input, width: width || 240 }}
-        type="text"
-        value={value}
-        placeholder={placeholder || ''}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {hint && <span style={S.hint}>{hint}</span>}
+      <div style={S.fieldBody}>
+        <input
+          style={{ ...S.input, width: '100%' }}
+          type="text"
+          value={value}
+          placeholder={placeholder || ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {hint && <span style={S.hint}>{hint}</span>}
+      </div>
     </div>
   )
 }
 
 function NumberField({ label, value, onChange, hint, placeholder }) {
   return (
-    <div style={S.fieldRow}>
-      <span style={S.label}>{label}</span>
+    <div style={S.numberRow}>
+      <span style={S.numberLabel}>{label}</span>
       <input
         style={S.input}
         type="number"
@@ -151,14 +174,16 @@ function SelectField({ label, value, onChange, options, hint }) {
   return (
     <div style={S.fieldRow}>
       <span style={S.label}>{label}</span>
-      <select style={{ ...S.input, width: 240 }} value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      {hint && <span style={S.hint}>{hint}</span>}
+      <div style={S.fieldBody}>
+        <select style={{ ...S.input, width: '100%' }} value={value} onChange={(e) => onChange(e.target.value)}>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        {hint && <span style={S.hint}>{hint}</span>}
+      </div>
     </div>
   )
 }
@@ -179,6 +204,13 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   const [dragIdx, setDragIdx] = useState(null)
   const [overIdx, setOverIdx] = useState(null)
 
+  // Access-request token generation state.
+  // tokenState: '' | 'pending' | 'approved' | 'denied' | 'error'
+  const [tokenState, setTokenState] = useState('')
+  const [tokenMsg, setTokenMsg] = useState('')
+  const [requesting, setRequesting] = useState(false)
+  const pollRef = useRef(null)
+
   const appsRef = useRef(apps)
   appsRef.current = apps
 
@@ -186,8 +218,72 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   useEffect(() => {
     return () => {
       if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current)
+      if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [])
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [])
+
+  // Poll a submitted access request until the server admin approves or denies it.
+  // See https://signalk.org/specification/1.8.2/doc/access_requests.html
+  const pollRequest = useCallback(
+    async (href) => {
+      try {
+        const res = await fetch(href, { headers: { Accept: 'application/json' } })
+        if (!res.ok) return // transient (e.g. 404 before the request is registered) — keep polling
+        const data = await res.json()
+        if (data.state !== 'COMPLETED') return // still PENDING — keep polling
+        stopPolling()
+        const ar = data.accessRequest || {}
+        if (ar.permission === 'APPROVED' && ar.token) {
+          setSkToken(ar.token)
+          setTokenState('approved')
+          setTokenMsg('Approved — token inserted below. Click Save Configuration to store it.')
+        } else if (ar.permission === 'DENIED') {
+          setTokenState('denied')
+          setTokenMsg('The access request was denied.')
+        } else {
+          setTokenState('error')
+          setTokenMsg(data.message || 'The access request could not be completed.')
+        }
+      } catch {
+        // Network hiccup — leave the interval running and try again next tick.
+      }
+    },
+    [stopPolling]
+  )
+
+  const requestToken = useCallback(async () => {
+    stopPolling()
+    setRequesting(true)
+    setTokenState('pending')
+    setTokenMsg('Submitting access request…')
+    try {
+      const res = await fetch('/signalk/v1/access/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ clientId: uuidv4(), description: 'Navico MFD Embedder', permissions: 'readwrite' })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!data.href) {
+        throw new Error(data.message || `Server did not return a request reference (${res.status})`)
+      }
+      setTokenState('pending')
+      setTokenMsg('Access request submitted. Approve it in Security → Access Requests to receive the token.')
+      pollRequest(data.href)
+      pollRef.current = setInterval(() => pollRequest(data.href), 2000)
+    } catch (e) {
+      setTokenState('error')
+      setTokenMsg('Access request failed: ' + (e.message || e))
+    } finally {
+      setRequesting(false)
+    }
+  }, [pollRequest, stopPolling])
 
   const buildConfig = useCallback(
     (appsList) => ({
@@ -353,8 +449,31 @@ export default function PluginConfigurationPanel({ configuration, save }) {
         onChange={setSkToken}
         placeholder="Leave blank if not using authentication"
         hint="JWT injected into proxied requests — see Authentication"
-        width={360}
       />
+
+      <div style={S.fieldRow}>
+        <span style={S.label} />
+        <button
+          style={{ ...S.btn, ...S.btnPrimary, flex: 1, justifyContent: 'center', ...(requesting ? { opacity: 0.6 } : {}) }}
+          onClick={requestToken}
+          disabled={requesting}
+        >
+          {requesting ? 'Requesting…' : 'Generate Authentication Token'}
+        </button>
+      </div>
+      {tokenState && (
+        <div style={{ ...S.status, color: tokenStateColor(tokenState) }}>
+          {tokenMsg}
+          {(tokenState === 'pending' || tokenState === 'denied') && (
+            <>
+              {' '}
+              <a href="/admin/#/security/access/requests" target="_blank" rel="noopener noreferrer" style={S.link}>
+                Open Access Requests →
+              </a>
+            </>
+          )}
+        </div>
+      )}
 
       <div style={S.sectionTitle}>Web Apps</div>
       <button
