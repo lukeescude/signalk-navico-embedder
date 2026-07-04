@@ -195,6 +195,9 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   const [port, setPort] = useState(cfg.port || 8080)
   const [serverPort, setServerPort] = useState(cfg.serverPort || '')
   const [skToken, setSkToken] = useState(cfg.skToken || '')
+  // Permission level requested via the access-request API when generating a token.
+  // Values match the Signal K access request spec: readonly | readwrite | admin.
+  const [skAuthLevel, setSkAuthLevel] = useState('readwrite')
   const [apps, setApps] = useState(() => cfg.apps || [])
 
   const [status, setStatus] = useState('')
@@ -243,7 +246,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
         if (ar.permission === 'APPROVED' && ar.token) {
           setSkToken(ar.token)
           setTokenState('approved')
-          setTokenMsg('Approved — token inserted below. Click Save Configuration to store it.')
+          setTokenMsg('Approved. Click Save Configuration below to store it.')
         } else if (ar.permission === 'DENIED') {
           setTokenState('denied')
           setTokenMsg('The access request was denied.')
@@ -267,7 +270,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
       const res = await fetch('/signalk/v1/access/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ clientId: uuidv4(), description: 'Navico MFD Embedder', permissions: 'readwrite' })
+        body: JSON.stringify({ clientId: uuidv4(), description: 'Navico MFD Embedder', permissions: skAuthLevel })
       })
       const data = await res.json().catch(() => ({}))
       if (!data.href) {
@@ -283,7 +286,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
     } finally {
       setRequesting(false)
     }
-  }, [pollRequest, stopPolling])
+  }, [pollRequest, stopPolling, skAuthLevel])
 
   const buildConfig = useCallback(
     (appsList) => ({
@@ -448,19 +451,39 @@ export default function PluginConfigurationPanel({ configuration, save }) {
         value={skToken}
         onChange={setSkToken}
         placeholder="Leave blank if not using authentication"
-        hint="JWT injected into proxied requests — see Authentication"
+        hint="Auth token injected into proxied requests."
       />
 
-      <div style={S.fieldRow}>
-        <span style={S.label} />
-        <button
-          style={{ ...S.btn, ...S.btnPrimary, flex: 1, justifyContent: 'center', ...(requesting ? { opacity: 0.6 } : {}) }}
-          onClick={requestToken}
-          disabled={requesting}
-        >
-          {requesting ? 'Requesting…' : 'Generate Authentication Token'}
-        </button>
-      </div>
+      {/* Only offer token generation when the field is empty — once a token is
+          present there's nothing to request, so hide the level + generate UI. */}
+      {!skToken.trim() && (
+        <>
+          <SelectField
+            label="Authentication level"
+            value={skAuthLevel}
+            onChange={setSkAuthLevel}
+            options={[
+              { value: 'readonly', label: 'Read' },
+              { value: 'readwrite', label: 'Read/Write' },
+              { value: 'admin', label: 'Admin' }
+            ]}
+            hint="Permission level requested when generating the token. Any plugins with custom APIs will need 'admin' level."
+          />
+
+          <div style={S.fieldRow}>
+            <span style={S.label} />
+            <button
+              style={{ ...S.btn, ...S.btnPrimary, flex: 1, justifyContent: 'center', ...(requesting ? { opacity: 0.6 } : {}) }}
+              onClick={requestToken}
+              disabled={requesting}
+            >
+              {requesting ? 'Requesting…' : 'Generate Authentication Token'}
+            </button>
+          </div>
+        </>
+      )}
+      {/* Kept outside the empty-token guard so the "Approved — token inserted"
+          confirmation still shows after a successful request fills the field. */}
       {tokenState && (
         <div style={{ ...S.status, color: tokenStateColor(tokenState) }}>
           {tokenMsg}
