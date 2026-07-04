@@ -67,7 +67,7 @@ const S = {
   },
   iconImg: { width: '100%', height: '100%', objectFit: 'contain', padding: 5 },
   info: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 },
-  toggle: { flexShrink: 0, paddingTop: 8 },
+  toggle: { flexShrink: 0, paddingTop: 8, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 },
   checkbox: { width: 16, height: 16, cursor: 'pointer', accentColor: '#3b82f6' },
   empty: { textAlign: 'center', padding: '30px 16px', color: '#999', fontSize: 13 },
   fieldRow: { display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
@@ -96,7 +96,24 @@ const S = {
   appInputName: { fontWeight: 600 },
   actions: { display: 'flex', gap: 10, alignItems: 'center', marginTop: 16 },
   hint: { fontSize: 11, color: '#aaa' },
-  link: { color: '#3b82f6', fontWeight: 600, textDecoration: 'none' }
+  link: { color: '#3b82f6', fontWeight: 600, textDecoration: 'none' },
+  loading: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    color: '#666',
+    fontSize: 13
+  },
+  spinner: {
+    width: 16,
+    height: 16,
+    flexShrink: 0,
+    border: '2px solid #cbd5e1',
+    borderTopColor: '#3b82f6',
+    borderRadius: '50%',
+    animation: 'nve-spin 0.7s linear infinite'
+  }
 }
 
 function tokenStateColor(state) {
@@ -312,7 +329,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
       if (result && typeof result.then === 'function') {
         await result
       }
-      setStatus('Configuration saved — plugin will restart')
+      setStatus('Configuration saved. Plugin will restart')
       setStatusError(false)
       statusTimeoutRef.current = setTimeout(() => setStatus(''), 5000)
     } catch (e) {
@@ -323,7 +340,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
     }
   }, [apps, buildConfig, save])
 
-  const discover = async () => {
+  const discover = useCallback(async () => {
     setDiscovering(true)
     setStatus('')
     setStatusError(false)
@@ -359,7 +376,8 @@ export default function PluginConfigurationPanel({ configuration, save }) {
       for (const w of webapps) {
         if (!existingUrls.has(w.url)) {
           merged.push({
-            enabled: true,
+            // New apps start disabled — the user opts them in explicitly.
+            enabled: false,
             url: w.url,
             label: w.label || '',
             description: w.description || '',
@@ -381,11 +399,16 @@ export default function PluginConfigurationPanel({ configuration, save }) {
       setStatusError(true)
     }
     setDiscovering(false)
-  }
+  }, [])
+
+  // Auto-discover installed webapps when the panel opens so the list stays in
+  // sync without the user having to click the button.
+  useEffect(() => {
+    discover()
+  }, [discover])
 
   const updateApp = (i, patch) => setApps(apps.map((a, j) => (j === i ? { ...a, ...patch } : a)))
   const toggleApp = (i) => updateApp(i, { enabled: apps[i].enabled === false })
-  const removeApp = (i) => setApps(apps.filter((_, j) => j !== i))
 
   const onDragStart = (i) => setDragIdx(i)
   const onDragOver = (e, i) => {
@@ -411,6 +434,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
 
   return (
     <div style={S.root}>
+      <style>{'@keyframes nve-spin { to { transform: rotate(360deg) } }'}</style>
       <div style={S.sectionTitle}>Plugin Settings</div>
 
       <SelectField
@@ -498,19 +522,18 @@ export default function PluginConfigurationPanel({ configuration, save }) {
         </div>
       )}
 
-      <div style={S.sectionTitle}>Web Apps</div>
-      <button
-        style={{ ...S.btn, ...S.btnPrimary, ...(discovering ? { opacity: 0.6 } : {}) }}
-        onClick={discover}
-        disabled={discovering}
-      >
-        {discovering ? 'Discovering…' : 'Discover Installed Webapps'}
-      </button>
-      {status && <div style={{ ...S.status, color: statusError ? '#ef4444' : '#10b981' }}>{status}</div>}
-
       <div style={S.sectionTitle}>MFD Apps (drag to reorder)</div>
+      {discovering ? (
+        <div style={S.loading}>
+          <span style={S.spinner} /> Discovering installed webapps…
+        </div>
+      ) : (
+        status && <div style={{ ...S.status, color: statusError ? '#ef4444' : '#10b981' }}>{status}</div>
+      )}
       {apps.length === 0 ? (
-        <div style={S.empty}>No apps yet. Click Discover above.</div>
+        <div style={S.empty}>
+          {discovering ? 'Loading installed webapps…' : 'No webapps found. Is the server fully started?'}
+        </div>
       ) : (
         <div>
           {apps.map((app, i) => (
@@ -552,17 +575,15 @@ export default function PluginConfigurationPanel({ configuration, save }) {
                   onChange={(e) => updateApp(i, { description: e.target.value })}
                 />
               </div>
-              <div style={S.toggle} title="Enabled">
+              <label style={S.toggle} title="Enabled">
                 <input
                   type="checkbox"
                   checked={app.enabled !== false}
                   onChange={() => toggleApp(i)}
                   style={S.checkbox}
                 />
-              </div>
-              <button style={{ ...S.btn, ...S.btnDanger, marginTop: 6 }} onClick={() => removeApp(i)}>
-                Remove
-              </button>
+                <span>Enabled</span>
+              </label>
             </div>
           ))}
         </div>
