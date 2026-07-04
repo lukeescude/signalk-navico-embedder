@@ -587,12 +587,12 @@ module.exports = function (app) {
         if (mode === 'launcher') {
           app.setPluginStatus(
             `Announcing app launcher to MFD via ${serverUrl} `
-            + `(${enabledApps.length} app(s) available, IP: ${ip})`,
+            + `(${enabledApps.length} app(s) available)`,
           );
         } else if (apps.length === 0) {
           app.setPluginStatus(`Proxy listening on ${serverUrl} — no apps configured yet (use Discover)`);
         } else {
-          app.setPluginStatus(`Announcing ${apps.length} tile(s) to MFD via ${serverUrl} (IP: ${ip})`);
+          app.setPluginStatus(`Announcing ${apps.length} tile(s) to MFD via ${serverUrl}`);
         }
         app.debug(`Proxy listening on ${serverUrl}, forwarding to ${targetParsed.origin}`);
       });
