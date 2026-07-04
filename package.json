@@ -1,6 +1,6 @@
 {
   "name": "signalk-navico-embedder",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Embed SignalK webapps as native apps on B&G/Navico MFDs.",
   "main": "index.js",
   "scripts": {

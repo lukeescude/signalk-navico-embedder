@@ -1,3 +1,14 @@
+# v1.4.0
+
+- **In-panel authentication token generation**: the config panel now has a dedicated "Signal K auth token" field and a **Generate Authentication Token** button that runs Signal K's device access-request flow and shows the live approval status, so a token can be created and stored entirely from the plugin UI. Previously `skToken` was declared in the schema and documented in the README, but the React panel (which replaces Signal K's auto-generated form) rendered no input for it — it only preserved an already-set value, leaving no way to enter one through the UI
+- Added a **permission-level selector** (Read / Read-Write / Admin) that feeds the access request's `permissions` field instead of hard-coding `readwrite`; the level selector and generate button hide once a token is present, while the approval status message stays visible (fixes #5)
+- Config panel now **auto-discovers installed web apps when it opens** (with a spinner) instead of requiring a manual "Discover Installed Webapps" click; newly discovered apps start **disabled** so they are opted in explicitly, the per-app "Remove" button was dropped, and the enabled toggle is now an inline "Enabled" checkbox
+- Fixed the **SignalK Admin** discovery entry: it now announces as "SignalK Admin" with the bundled Signal K logo icon and a description, instead of an unlabeled "Settings" tile with no icon
+- Config-panel layout polish: token/select fields use the full column width with the note stacked below, port (number) fields stay narrow with the note inline, and the generate button spans the input/note columns
+- Schema/docs sync: declared `icon` under `apps.items` so the schema matches what `buildAppModel` and Discover actually use, and documented the "Signal K server port" and auth-token options in the README
+- Removed the redundant IP address from the MFD announcement status message (it duplicated the server URL already shown)
+- Documentation: expanded the verified-hardware list (added B&G Zeus³ 12", fixes #4), added Signal K Admin and R&D/testing notes, refreshed the app screenshots (instrument panel, SailSense, tides, anchor alarm, launcher, home screen), and tightened the package description
+
 # v1.3.1
 
 - Fixed intermittent WebSocket data loss through the proxy: when the upstream Signal K server's `101 Switching Protocols` handshake and its first WS frame (e.g. the connection `hello`) arrived in the same TCP read, Node's `http` client split them into the `upgrade` event's response and a separate `head` buffer that the proxy was silently discarding. This showed up as instrumentpanel (and other apps using the delta stream) intermittently never receiving their initial state on load, causing visible flashing/flicker on the MFD. Both the client- and upstream-facing `upgrade` handlers now forward that `head` buffer before piping
