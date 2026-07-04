@@ -114,7 +114,14 @@ This means the token only needs to be stored once (in the plugin config) and wor
 | ✅       | [hoekens-anchor-alarm](https://www.npmjs.com/package/hoekens-anchor-alarm) |       |
 | ✅       | [signalk-watch-schedule](https://www.npmjs.com/package/signalk-watch-schedule) |       |
 | ✅       | [signalk-sailsense](https://www.npmjs.com/package/signalk-sailsense)       |       |
+| ✅       | [signalk-instrumentpanel](https://www.npmjs.com/package/signalk-instrumentpanel) |       |
+| ✅       | [signalk-sun-moon](https://www.npmjs.com/package/signalk-sun-moon)         |       |
+| ✅       | [signalk-tides](https://www.npmjs.com/package/signalk-tides)               | Works, but the up/down emojis currently don't render properly |
 | ⚠️       | SignalK Admin                                                              | Works, but is extremely slow |
+| ⚠️       | [KIP](https://www.npmjs.com/package/@mxtommy/kip)                          | Loads, but doesn't see auth token and doesn't update. |
+| ❌       | [Freeboard](https://www.npmjs.com/package/@signalk/freeboard-sk)           | Doesn't load. |
+
+If you've tested a plugin on your MFD and would like it added to the list, please [open an issue or submit a PR](https://github.com/lukeescude/signalk-navico-embedder) with the plugin name and how well it works.
 
 
 ## Testers Wanted
