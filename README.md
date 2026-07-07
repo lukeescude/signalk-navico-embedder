@@ -99,6 +99,16 @@ When a token is configured the proxy:
 
 This means the token only needs to be stored once (in the plugin config) and works transparently for all proxied apps.
 
+### Restricted paths
+
+Because the proxy injects the token into every upstream request, it will only forward a restricted set of paths — otherwise anything on the network that could reach the proxy port would have an authenticated gateway to the entire Signal K server. The proxy forwards:
+
+- **Each enabled app's path** (and everything beneath it, so the app's own assets load). Disabling an app in the config removes its path from the allowlist.
+- **`/signalk`** — all Signal K REST APIs and the WebSocket stream live here, so every proxied app needs it.
+- **`/signalk-navico-embedder/`** — this plugin's own app-chooser page (the tile announced in launcher mode).
+
+Everything else returns `403 Forbidden`. Notably the Signal K admin UI (`/admin`) is only reachable through the proxy if you enable the auto-discovered **SignalK Admin** app — so exposing it on the MFD is a deliberate, visible choice.
+
 ## Verified Hardware
 
 | Works    | Make | MFD Model    | Browser      |

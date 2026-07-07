@@ -1,3 +1,9 @@
+# v1.5.0 (2026-07-07)
+
+- **Restricted which paths the proxy will forward.** The proxy injects the configured auth token into every upstream request, so previously it was an open, authenticated gateway to the *entire* Signal K server for anything that could reach the proxy port. It now forwards only: each enabled app's path (and everything beneath it, so app assets still load), `/signalk` (all REST APIs and the WebSocket stream), and this plugin's own `/signalk-navico-embedder/` launcher page. Everything else returns `403 Forbidden`, and disallowed WebSocket upgrades are dropped. The admin UI (`/admin`) is reachable only when you enable the auto-discovered **SignalK Admin** app, making that a deliberate, visible choice
+- Request paths are decoded and normalized before the allowlist check, so encoded or relative traversal (e.g. `/signalk/%2e%2e/admin`) can't slip a disallowed path past a matching prefix, and prefix matching is by path segment so `/signalk` never matches `/signalkfoo`
+- Added unit tests for the allowlist helpers (`buildAllowedPrefixes`, `isPathAllowed`) and integration tests covering allowed/blocked HTTP paths, disabled apps, prefix look-alikes, traversal, and blocked WebSocket upgrades
+
 # v1.4.1 (2026-07-06)
 
 - Corrected the MFD's documented and targeted Chromium version from 70 to **69** (its actual, verified version): the esbuild transpilation target changed `chrome70` → `chrome69` and the `postcss-preset-env` browserslist target changed `Chrome >= 70` → `Chrome >= 69`. Both changes only make downleveling more conservative, so nothing that worked before regresses; confirmed against the full test suite

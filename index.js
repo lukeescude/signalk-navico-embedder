@@ -21,6 +21,19 @@ const FALLBACK_ICON_ROUTE = '/__navico-embedder-icon';
 // and the user picks an app to open from there.
 const LAUNCHER_PATH = '/signalk-navico-embedder/';
 
+// Path prefixes the proxy always forwards regardless of the configured app list:
+//   /signalk                  — all Signal K REST APIs and the WebSocket stream
+//                               live here; every proxied app needs it to function.
+//   /signalk-navico-embedder  — this plugin's own app-chooser page and its assets
+//                               (served from /public); the announced tile in
+//                               launcher mode.
+// Everything else must be explicitly enabled as an app — including /admin, which is
+// auto-discovered as the "SignalK Admin" webapp, so allowing it is a deliberate,
+// visible choice rather than an open door. See buildAllowedPrefixes/isPathAllowed:
+// the proxy injects an auth token into every upstream request, so an unrestricted
+// path list would turn it into an open, authenticated gateway to the whole server.
+const ALWAYS_ALLOWED_PREFIXES = ['/signalk', LAUNCHER_PATH.replace(/\/+$/, '')];
+
 const STRIP_RESPONSE_HEADERS = new Set([
   'x-frame-options',
   'content-security-policy',
@@ -275,6 +288,44 @@ function buildAppModel(options, ip, port) {
   return { mode, enabledApps, apps, webapps };
 }
 
+// Normalize a configured app path to a comparison prefix: leading slash, no
+// trailing slash. '/admin/' -> '/admin', 'foo' -> '/foo'. Returns '' for '/' or an
+// empty value, which the caller drops so a stray root-path app can't collapse the
+// allowlist into allow-all.
+function toPrefix(p) {
+  if (!p) return '';
+  const withSlash = p.startsWith('/') ? p : `/${p}`;
+  return withSlash.replace(/\/+$/, '');
+}
+
+// The set of path prefixes the proxy will forward: the always-allowed fixed paths
+// plus one per enabled app. Anything outside this list is refused.
+function buildAllowedPrefixes(enabledApps) {
+  const prefixes = new Set(ALWAYS_ALLOWED_PREFIXES);
+  for (const a of enabledApps || []) {
+    const prefix = toPrefix(a && a.url);
+    if (prefix) prefixes.add(prefix);
+  }
+  return [...prefixes];
+}
+
+// Decide whether a request URL may be proxied. The path is decoded and normalized
+// first so encoded or relative traversal (e.g. /signalk/%2e%2e/admin) resolves to
+// the path the Signal K server would actually serve before it is matched — a raw
+// prefix check alone would see the leading /signalk/ and wave it through. A prefix
+// P matches path X when X === P or X starts with P + '/', so /signalk never matches
+// /signalkfoo.
+function isPathAllowed(reqUrl, allowedPrefixes) {
+  let p = (reqUrl || '').split('?')[0].split('#')[0];
+  try {
+    p = decodeURIComponent(p);
+  } catch {
+    return false; // malformed percent-encoding — reject rather than guess
+  }
+  p = path.posix.normalize(p);
+  return allowedPrefixes.some((prefix) => p === prefix || p.startsWith(prefix + '/'));
+}
+
 module.exports = function (app) {
   let server = null;
   let publishInterval = null;
@@ -365,6 +416,12 @@ module.exports = function (app) {
       // both derived from the saved options — see buildAppModel.
       const { mode, enabledApps, apps, webapps } = buildAppModel(options, ip, port);
 
+      // Restrict what the proxy will forward to the enabled apps, /signalk, and this
+      // plugin's own launcher page — see ALWAYS_ALLOWED_PREFIXES. Without this the
+      // token-injecting proxy is an open, authenticated gateway to the whole server.
+      const allowedPrefixes = buildAllowedPrefixes(enabledApps);
+      app.debug(`Proxy path allowlist: ${allowedPrefixes.join(', ')}`);
+
       const publish = () => {
         if (apps.length === 0) return;
         const socket = dgram.createSocket('udp4');
@@ -392,6 +449,13 @@ module.exports = function (app) {
           const icon = fs.readFileSync(path.join(__dirname, FALLBACK_ICON.file));
           res.writeHead(200, { 'Content-Type': FALLBACK_ICON.mime, 'Cache-Control': 'max-age=3600' });
           res.end(icon);
+          return;
+        }
+
+        if (!isPathAllowed(req.url, allowedPrefixes)) {
+          app.debug(`Blocked disallowed path: ${req.method} ${req.url}`);
+          res.writeHead(403, { 'Content-Type': 'text/plain' });
+          res.end('Forbidden');
           return;
         }
 
@@ -493,6 +557,12 @@ module.exports = function (app) {
       });
 
       server.on('upgrade', (req, socket, reqHead) => {
+        if (!isPathAllowed(req.url, allowedPrefixes)) {
+          app.debug(`Blocked disallowed WS upgrade: ${req.url}`);
+          socket.destroy();
+          return;
+        }
+
         // Disable Nagle on the MFD socket immediately — small WS packets should
         // not be buffered; without this the upgrade handshake itself can be delayed.
         socket.setNoDelay(true);
@@ -634,6 +704,8 @@ module.exports.internal = {
   getServerPort,
   buildAnnouncement,
   buildAppModel,
+  buildAllowedPrefixes,
+  isPathAllowed,
   FALLBACK_ICON_ROUTE,
   LAUNCHER_PATH,
 };

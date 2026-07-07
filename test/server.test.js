@@ -182,7 +182,7 @@ test('injects polyfills and the auth token into proxied HTML', async () => {
     },
   });
   try {
-    const res = await ctx.get('/', { 'if-none-match': '"abc"', 'accept-encoding': 'gzip' });
+    const res = await ctx.get('/signalk/', { 'if-none-match': '"abc"', 'accept-encoding': 'gzip' });
 
     assert.equal(res.status, 200);
     assert.ok(res.body.includes('Object.fromEntries'), 'polyfill script injected');
@@ -210,7 +210,7 @@ test('omits the token script when no token is configured', async () => {
     },
   });
   try {
-    const res = await ctx.get('/');
+    const res = await ctx.get('/signalk/');
     assert.ok(res.body.includes('Object.fromEntries'));
     assert.ok(!res.body.includes('SK_TOKEN'), 'no token script without a token');
   } finally {
@@ -227,7 +227,7 @@ test('transpiles modern JavaScript for the MFD old Chromium', async () => {
     },
   });
   try {
-    const res = await ctx.get('/bundle.js');
+    const res = await ctx.get('/signalk/bundle.js');
     assert.equal(res.status, 200);
     assert.match(res.headers['content-type'], /javascript/);
     assert.ok(res.body.includes('pick'), 'identifiers preserved');
@@ -247,7 +247,7 @@ test('downlevels modern CSS for the MFD old Chromium', async () => {
     },
   });
   try {
-    const res = await ctx.get('/bundle.css');
+    const res = await ctx.get('/signalk/bundle.css');
     assert.equal(res.status, 200);
     assert.match(res.headers['content-type'], /css/);
     assert.ok(res.body.includes('h1'), 'rules preserved');
@@ -274,7 +274,7 @@ test('strips framing headers from the proxied response', async () => {
     },
   });
   try {
-    const res = await ctx.get('/');
+    const res = await ctx.get('/signalk/');
     assert.equal(res.body, 'hi');
     assert.equal(res.headers['x-frame-options'], undefined);
     assert.equal(res.headers['content-security-policy'], undefined);
@@ -293,7 +293,7 @@ test('rewrites redirect Location headers to the proxy origin', async () => {
     },
   });
   try {
-    const res = await ctx.get('/go');
+    const res = await ctx.get('/signalk/go');
     assert.equal(res.status, 302);
     assert.equal(res.headers.location, `http://127.0.0.1:${ctx.proxyPort}/after`);
   } finally {
@@ -309,10 +309,123 @@ test('passes non-text content through unchanged', async () => {
     },
   });
   try {
-    const res = await ctx.get('/data');
+    const res = await ctx.get('/signalk/data');
     assert.equal(res.status, 200);
     assert.match(res.headers['content-type'], /application\/json/);
     assert.equal(res.body, '{"x":1}');
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('refuses a path outside the allowlist without touching the backend', async () => {
+  const ctx = await setup({
+    options: { apps: [{ enabled: true, url: '/@signalk/freeboard-sk/' }] },
+  });
+  try {
+    // /admin is not enabled, so it is not proxied even though it exists upstream.
+    const res = await ctx.get('/admin/');
+    assert.equal(res.status, 403);
+    assert.equal(res.body, 'Forbidden');
+    assert.equal(ctx.backend.requests.length, 0, 'blocked request never reached the backend');
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('proxies an enabled app path and everything under it', async () => {
+  const ctx = await setup({
+    options: { apps: [{ enabled: true, url: '/@signalk/freeboard-sk/' }] },
+  });
+  try {
+    const root = await ctx.get('/@signalk/freeboard-sk/');
+    const asset = await ctx.get('/@signalk/freeboard-sk/assets/app.js');
+    assert.equal(root.status, 200);
+    assert.equal(asset.status, 200);
+    assert.deepEqual(
+      ctx.backend.requests.map((r) => r.url),
+      ['/@signalk/freeboard-sk/', '/@signalk/freeboard-sk/assets/app.js'],
+    );
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('a disabled app is not proxied', async () => {
+  const ctx = await setup({
+    options: { apps: [{ enabled: false, url: '/@signalk/freeboard-sk/' }] },
+  });
+  try {
+    const res = await ctx.get('/@signalk/freeboard-sk/');
+    assert.equal(res.status, 403);
+    assert.equal(ctx.backend.requests.length, 0);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('always allows /signalk and the launcher page', async () => {
+  const ctx = await setup();
+  try {
+    assert.equal((await ctx.get('/signalk/v1/api/vessels/self')).status, 200);
+    assert.equal((await ctx.get(LAUNCHER_PATH)).status, 200);
+    assert.equal((await ctx.get(`${LAUNCHER_PATH}signalk-logo.png`)).status, 200);
+    assert.equal(ctx.backend.requests.length, 3);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('a prefix look-alike path is not treated as allowed', async () => {
+  const ctx = await setup();
+  try {
+    // /signalkfoo shares the /signalk prefix textually but is a different path.
+    const res = await ctx.get('/signalkfoo');
+    assert.equal(res.status, 403);
+    assert.equal(ctx.backend.requests.length, 0);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('encoded traversal that escapes an allowed prefix is refused', async () => {
+  const ctx = await setup();
+  try {
+    // Resolves to /admin, which is not enabled — the leading /signalk/ must not
+    // wave it through.
+    const res = await ctx.get('/signalk/%2e%2e/admin/');
+    assert.equal(res.status, 403);
+    assert.equal(ctx.backend.requests.length, 0);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('refuses a WebSocket upgrade on a disallowed path', async () => {
+  const ctx = await setup();
+  try {
+    const closed = await new Promise((resolve, reject) => {
+      const req = http.request({
+        host: '127.0.0.1',
+        port: ctx.proxyPort,
+        path: '/admin/ws',
+        headers: { Connection: 'Upgrade', Upgrade: 'websocket' },
+      });
+      const timer = setTimeout(() => reject(new Error('no response to blocked WS upgrade')), 2000);
+      const settle = (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      };
+      req.on('upgrade', () => settle(false)); // upgrade should never succeed
+      // Disallowed upgrades are answered by destroying the socket, surfacing here
+      // as a connection error / close before any response.
+      req.on('error', () => settle(true));
+      req.on('close', () => settle(true));
+      req.on('response', () => settle(true));
+      req.end();
+    });
+    assert.equal(closed, true, 'blocked WS upgrade was not tunnelled');
+    assert.equal(ctx.backend.requests.length, 0);
   } finally {
     await ctx.cleanup();
   }
@@ -327,7 +440,7 @@ test('returns 502 when the Signal K server is unreachable', async () => {
   p.start({ ip: '127.0.0.1', port: proxyPort, serverPort: deadPort, apps: [] });
   try {
     await waitForProxy(proxyPort);
-    const res = await httpGet(proxyPort, '/');
+    const res = await httpGet(proxyPort, '/signalk/');
     assert.equal(res.status, 502);
     assert.ok(res.body.startsWith('Proxy error'));
   } finally {
