@@ -121,26 +121,26 @@ Add the MFD's own IPv4 address (find it in the MFD's network settings) plus any 
 
 ## Verified Hardware
 
-| Works    | Make | MFD Model    | Browser      |
-| -------- | ---- | ------------ | ------------ |
-| ✅       | B&G  | Zeus 3S 9    | Chromium 69  |
-| ✅       | B&G  | Zeus 3S 12   | Chromium 69  |
-| ✅       | B&G  | Zeus 3S 16   | Chromium 69  |
-| ✅       | B&G  | Zeus 3 12   | Chromium 69  |
+| Works | Make | MFD Model  | Browser     |
+|-------|------|------------|-------------|
+| ✅     | B&G  | Zeus 3S 9  | Chromium 69 |
+| ✅     | B&G  | Zeus 3S 12 | Chromium 69 |
+| ✅     | B&G  | Zeus 3S 16 | Chromium 69 |
+| ✅     | B&G  | Zeus 3 12  | Chromium 69 |
 
 ## Verified Plugins
 
-| Works    | Plugin                                                                     | Notes |
-| -------- | -------------------------------------------------------------------------- | ----- |
-| ✅       | [hoekens-anchor-alarm](https://www.npmjs.com/package/hoekens-anchor-alarm) |       |
-| ✅       | [signalk-watch-schedule](https://www.npmjs.com/package/signalk-watch-schedule) |       |
-| ✅       | [signalk-sailsense](https://www.npmjs.com/package/signalk-sailsense)       |       |
-| ✅       | [signalk-instrumentpanel](https://www.npmjs.com/package/signalk-instrumentpanel) |       |
-| ✅       | [signalk-sun-moon](https://www.npmjs.com/package/signalk-sun-moon)         |       |
-| ✅       | [signalk-tides](https://www.npmjs.com/package/signalk-tides)               | Works, but the up/down emojis currently don't render properly |
-| ⚠️       | SignalK Admin                                                              | Works, but is extremely slow |
-| ⚠️       | [KIP](https://www.npmjs.com/package/@mxtommy/kip)                          | Loads, but doesn't see auth token and doesn't update. |
-| ❌       | [Freeboard](https://www.npmjs.com/package/@signalk/freeboard-sk)           | Doesn't load. |
+| Works | Plugin                                                                           | Notes                                                 |
+|-------|----------------------------------------------------------------------------------|-------------------------------------------------------|
+| ✅     | [hoekens-anchor-alarm](https://www.npmjs.com/package/hoekens-anchor-alarm)       |                                                       |
+| ✅     | [signalk-watch-schedule](https://www.npmjs.com/package/signalk-watch-schedule)   |                                                       |
+| ✅     | [signalk-sailsense](https://www.npmjs.com/package/signalk-sailsense)             |                                                       |
+| ✅     | [signalk-instrumentpanel](https://www.npmjs.com/package/signalk-instrumentpanel) |                                                       |
+| ✅     | [signalk-sun-moon](https://www.npmjs.com/package/signalk-sun-moon)               |                                                       |
+| ✅     | [signalk-tides](https://www.npmjs.com/package/signalk-tides)                     |                                                       |
+| ⚠️    | SignalK Admin                                                                    | Works, but is extremely slow                          |
+| ⚠️    | [KIP](https://www.npmjs.com/package/@mxtommy/kip)                                | Loads, but doesn't see auth token and doesn't update. |
+| ❌     | [Freeboard](https://www.npmjs.com/package/@signalk/freeboard-sk)                 | Doesn't load.                                         |
 
 If you've tested a plugin on your MFD and would like it added to the list, please [open an issue or submit a PR](https://github.com/lukeescude/signalk-navico-embedder) with the plugin name and how well it works.
 
