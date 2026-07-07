@@ -116,6 +116,14 @@ const S = {
   }
 }
 
+// Light client-side check to flag a malformed IPv4 entry as the user types. The
+// backend (buildIpWhitelist) canonicalizes and validates authoritatively on save.
+function isIpValid(s) {
+  const t = (s || '').trim()
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(t)
+  return !!m && m.slice(1).every((o) => Number(o) <= 255)
+}
+
 function tokenStateColor(state) {
   if (state === 'approved') return '#10b981'
   if (state === 'denied' || state === 'error') return '#ef4444'
@@ -216,6 +224,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   // Values match the Signal K access request spec: readonly | readwrite | admin.
   const [skAuthLevel, setSkAuthLevel] = useState('readwrite')
   const [apps, setApps] = useState(() => cfg.apps || [])
+  const [ipWhitelist, setIpWhitelist] = useState(() => cfg.ipWhitelist || [])
 
   const [status, setStatus] = useState('')
   const [statusError, setStatusError] = useState(false)
@@ -314,9 +323,12 @@ export default function PluginConfigurationPanel({ configuration, save }) {
       // Omit the token entirely when blank so clearing the field clears the
       // saved value; start() trims it again on load.
       ...(skToken.trim() ? { skToken: skToken.trim() } : {}),
+      // Trim and drop blank rows so an empty input can't make the list look
+      // "active"; buildIpWhitelist canonicalizes/validates again on load.
+      ipWhitelist: ipWhitelist.map((s) => s.trim()).filter(Boolean),
       apps: appsList
     }),
-    [mode, ip, port, serverPort, skToken]
+    [mode, ip, port, serverPort, skToken, ipWhitelist]
   )
 
   const doSave = useCallback(async () => {
@@ -409,6 +421,10 @@ export default function PluginConfigurationPanel({ configuration, save }) {
 
   const updateApp = (i, patch) => setApps(apps.map((a, j) => (j === i ? { ...a, ...patch } : a)))
   const toggleApp = (i) => updateApp(i, { enabled: apps[i].enabled === false })
+
+  const addIp = () => setIpWhitelist([...ipWhitelist, ''])
+  const updateIp = (i, val) => setIpWhitelist(ipWhitelist.map((ip, j) => (j === i ? val : ip)))
+  const removeIp = (i) => setIpWhitelist(ipWhitelist.filter((_, j) => j !== i))
 
   const onDragStart = (i) => setDragIdx(i)
   const onDragOver = (e, i) => {
@@ -521,6 +537,38 @@ export default function PluginConfigurationPanel({ configuration, save }) {
           )}
         </div>
       )}
+
+      <div style={S.sectionTitle}>Client IP Whitelist</div>
+      <div style={{ ...S.hint, marginBottom: 10 }}>
+        Restrict which clients may connect to the proxy. Leave empty to allow any client. Add the MFD&apos;s
+        IPv4 address (and any other allowed devices); every other client receives 403 Forbidden.
+      </div>
+      {ipWhitelist.length === 0 ? (
+        <div style={{ ...S.status, color: '#888' }}>No restrictions — any client may connect.</div>
+      ) : (
+        ipWhitelist.map((ip, i) => {
+          const invalid = ip.trim() !== '' && !isIpValid(ip)
+          return (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              <input
+                style={{ ...S.appInput, ...(invalid ? { borderColor: '#ef4444' } : {}) }}
+                type="text"
+                value={ip}
+                placeholder="e.g. 192.168.1.50"
+                onChange={(e) => updateIp(i, e.target.value)}
+              />
+              <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => removeIp(i)}>
+                Remove
+              </button>
+            </div>
+          )
+        })
+      )}
+      <div style={{ marginTop: 8 }}>
+        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addIp}>
+          + Add IP address
+        </button>
+      </div>
 
       <div style={S.sectionTitle}>MFD Apps (drag to reorder)</div>
       {discovering ? (

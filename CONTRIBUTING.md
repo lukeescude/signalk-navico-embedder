@@ -110,6 +110,8 @@ matters more here.
 | CSS responses                         | Downleveled via `postcss-preset-env` to `chrome69` target (see above)                    |
 | WebSocket upgrades                    | Forwarded to target; `Authorization` header and `?token=` appended if token configured   |
 | All HTTP requests (if token set)      | `Authorization: Bearer <token>` header added                                             |
+| Client IP not on whitelist (if set)   | Refused with `403 Forbidden` (WS upgrades dropped) before any routing or path check       |
+| Path outside the allowlist            | Refused with `403 Forbidden` (WS upgrades dropped)                                        |
 
 ## Development
 

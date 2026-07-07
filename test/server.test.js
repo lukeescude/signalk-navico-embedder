@@ -431,6 +431,79 @@ test('refuses a WebSocket upgrade on a disallowed path', async () => {
   }
 });
 
+test('allows a client whose IP is in the whitelist', async () => {
+  // Tests connect over loopback, so whitelisting 127.0.0.1 lets them through.
+  const ctx = await setup({ options: { ipWhitelist: ['127.0.0.1'] } });
+  try {
+    const res = await ctx.get('/signalk/');
+    assert.equal(res.status, 200);
+    assert.equal(ctx.backend.requests.length, 1);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('rejects a client whose IP is not in the whitelist', async () => {
+  // The whitelist holds a different address, so the loopback client is refused
+  // before the request is routed or proxied.
+  const ctx = await setup({ options: { ipWhitelist: ['10.99.99.99'] } });
+  try {
+    const res = await ctx.get('/signalk/');
+    assert.equal(res.status, 403);
+    assert.equal(res.body, 'Forbidden');
+    assert.equal(ctx.backend.requests.length, 0, 'blocked client never reached the backend');
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('an active whitelist also blocks the local fallback icon route', async () => {
+  const ctx = await setup({ options: { ipWhitelist: ['10.99.99.99'] } });
+  try {
+    const res = await ctx.get(FALLBACK_ICON_ROUTE);
+    assert.equal(res.status, 403);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('rejects a WebSocket upgrade from a non-whitelisted client', async () => {
+  const ctx = await setup({ options: { ipWhitelist: ['10.99.99.99'] } });
+  try {
+    const closed = await new Promise((resolve, reject) => {
+      const req = http.request({
+        host: '127.0.0.1',
+        port: ctx.proxyPort,
+        path: '/signalk/v1/stream',
+        headers: { Connection: 'Upgrade', Upgrade: 'websocket' },
+      });
+      const timer = setTimeout(() => reject(new Error('no response to blocked WS upgrade')), 2000);
+      const settle = (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      };
+      req.on('upgrade', () => settle(false)); // upgrade should never succeed
+      req.on('error', () => settle(true));
+      req.on('close', () => settle(true));
+      req.on('response', () => settle(true));
+      req.end();
+    });
+    assert.equal(closed, true, 'blocked WS upgrade was not tunnelled');
+    assert.equal(ctx.backend.requests.length, 0);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('reports an active IP whitelist in the plugin status', async () => {
+  const ctx = await setup({ options: { ipWhitelist: ['127.0.0.1', '10.0.0.1'] } });
+  try {
+    assert.ok(ctx.app.calls.status.at(-1).includes('IP whitelist active (2)'));
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test('returns 502 when the Signal K server is unreachable', async () => {
   const deadPort = await freePort(); // freed immediately, so connections are refused
   const proxyPort = await freePort();

@@ -326,6 +326,43 @@ function isPathAllowed(reqUrl, allowedPrefixes) {
   return allowedPrefixes.some((prefix) => p === prefix || p.startsWith(prefix + '/'));
 }
 
+// Canonicalize a client or configured address to a plain dotted IPv4 string, or ''
+// if it is not a valid IPv4. Strips an IPv4-mapped IPv6 prefix (::ffff:192.168.1.5
+// -> 192.168.1.5, which a dual-stack socket can report) and rejects out-of-range
+// octets, so a configured entry and a socket's remoteAddress compare canonically.
+function normalizeIp(addr) {
+  if (!addr) return '';
+  let s = String(addr).trim();
+  const mapped = /^::ffff:(.+)$/i.exec(s);
+  if (mapped) s = mapped[1];
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  if (!m) return '';
+  const octets = m.slice(1).map(Number);
+  if (octets.some((o) => o > 255)) return '';
+  return octets.join('.');
+}
+
+// The set of client IPs allowed to reach the proxy, built from saved options.
+// Blank and malformed entries are dropped (and the rest canonicalized) so a stray
+// empty row can't make the list look "active". An empty result means allow-all.
+function buildIpWhitelist(list) {
+  const out = new Set();
+  for (const entry of list || []) {
+    const ip = normalizeIp(entry);
+    if (ip) out.add(ip);
+  }
+  return [...out];
+}
+
+// Decide whether a client at remoteAddr may connect. An empty whitelist allows
+// every client (the default); otherwise the client's canonical IPv4 must be
+// listed. A non-IPv4 remote address normalizes to '', which is never in the list,
+// so it is refused whenever the whitelist is active.
+function isClientAllowed(remoteAddr, whitelist) {
+  if (!whitelist || whitelist.length === 0) return true;
+  return whitelist.includes(normalizeIp(remoteAddr));
+}
+
 module.exports = function (app) {
   let server = null;
   let publishInterval = null;
@@ -373,6 +410,19 @@ module.exports = function (app) {
           type: 'string',
           title: 'Signal K authentication token',
           description: 'JWT token injected into all proxied requests. Required when Signal K has authentication enabled and read-only access disabled (e.g. MFDs that have no session cookie). Use the "Generate Authentication Token" button in the plugin config panel, or enable Allow Read-Only Access instead.',
+        },
+        ipWhitelist: {
+          type: 'array',
+          title: 'Client IP whitelist',
+          description:
+            'Restrict which clients may connect to the proxy. Leave empty (the default) to allow any client. '
+            + 'Add one or more IPv4 addresses — e.g. the MFD\'s address — and only those clients may connect; '
+            + 'every other client receives 403 Forbidden. Find the MFD\'s IP in its network settings.',
+          default: [],
+          items: {
+            type: 'string',
+            title: 'IPv4 address',
+          },
         },
         apps: {
           type: 'array',
@@ -422,6 +472,14 @@ module.exports = function (app) {
       const allowedPrefixes = buildAllowedPrefixes(enabledApps);
       app.debug(`Proxy path allowlist: ${allowedPrefixes.join(', ')}`);
 
+      // Restrict which clients may connect. An empty list allows anyone (the
+      // default); otherwise only these IPv4 addresses get through — every other
+      // client is refused before it is routed or proxied. See isClientAllowed.
+      const ipWhitelist = buildIpWhitelist(options.ipWhitelist);
+      if (ipWhitelist.length) {
+        app.debug(`Client IP whitelist active (${ipWhitelist.length}): ${ipWhitelist.join(', ')}`);
+      }
+
       const publish = () => {
         if (apps.length === 0) return;
         const socket = dgram.createSocket('udp4');
@@ -445,6 +503,13 @@ module.exports = function (app) {
       };
 
       server = http.createServer((req, res) => {
+        if (!isClientAllowed(req.socket.remoteAddress, ipWhitelist)) {
+          app.debug(`Blocked client ${req.socket.remoteAddress}: not in IP whitelist`);
+          res.writeHead(403, { 'Content-Type': 'text/plain' });
+          res.end('Forbidden');
+          return;
+        }
+
         if (FALLBACK_ICON && req.url === FALLBACK_ICON_ROUTE) {
           const icon = fs.readFileSync(path.join(__dirname, FALLBACK_ICON.file));
           res.writeHead(200, { 'Content-Type': FALLBACK_ICON.mime, 'Cache-Control': 'max-age=3600' });
@@ -557,6 +622,12 @@ module.exports = function (app) {
       });
 
       server.on('upgrade', (req, socket, reqHead) => {
+        if (!isClientAllowed(socket.remoteAddress, ipWhitelist)) {
+          app.debug(`Blocked WS client ${socket.remoteAddress}: not in IP whitelist`);
+          socket.destroy();
+          return;
+        }
+
         if (!isPathAllowed(req.url, allowedPrefixes)) {
           app.debug(`Blocked disallowed WS upgrade: ${req.url}`);
           socket.destroy();
@@ -654,15 +725,16 @@ module.exports = function (app) {
       });
 
       server.listen(port, '0.0.0.0', () => {
+        const whitelistNote = ipWhitelist.length ? ` — IP whitelist active (${ipWhitelist.length})` : '';
         if (mode === 'launcher') {
           app.setPluginStatus(
             `Announcing app launcher to MFD via ${serverUrl} `
-            + `(${enabledApps.length} app(s) available)`,
+            + `(${enabledApps.length} app(s) available)${whitelistNote}`,
           );
         } else if (apps.length === 0) {
-          app.setPluginStatus(`Proxy listening on ${serverUrl} — no apps configured yet (use Discover)`);
+          app.setPluginStatus(`Proxy listening on ${serverUrl} — no apps configured yet (use Discover)${whitelistNote}`);
         } else {
-          app.setPluginStatus(`Announcing ${apps.length} tile(s) to MFD via ${serverUrl}`);
+          app.setPluginStatus(`Announcing ${apps.length} tile(s) to MFD via ${serverUrl}${whitelistNote}`);
         }
         app.debug(`Proxy listening on ${serverUrl}, forwarding to ${targetParsed.origin}`);
       });
@@ -706,6 +778,9 @@ module.exports.internal = {
   buildAppModel,
   buildAllowedPrefixes,
   isPathAllowed,
+  normalizeIp,
+  buildIpWhitelist,
+  isClientAllowed,
   FALLBACK_ICON_ROUTE,
   LAUNCHER_PATH,
 };

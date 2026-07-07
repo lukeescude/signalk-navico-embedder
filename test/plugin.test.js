@@ -25,6 +25,9 @@ test('module exports a plugin factory and pure internal helpers', () => {
     'buildAppModel',
     'buildAllowedPrefixes',
     'isPathAllowed',
+    'normalizeIp',
+    'buildIpWhitelist',
+    'isClientAllowed',
   ]) {
     assert.equal(typeof plugin.internal[name], 'function', `internal.${name} should be a function`);
   }
@@ -87,6 +90,55 @@ test('isPathAllowed resolves traversal before matching', () => {
   assert.equal(isPathAllowed('/signalk/%zz', prefixes), false);
 });
 
+test('normalizeIp canonicalizes IPv4 and rejects everything else', () => {
+  const { normalizeIp } = plugin.internal;
+
+  assert.equal(normalizeIp('192.168.1.50'), '192.168.1.50');
+  assert.equal(normalizeIp('  10.0.0.1  '), '10.0.0.1'); // surrounding whitespace trimmed
+  assert.equal(normalizeIp('192.168.001.005'), '192.168.1.5'); // leading zeros canonicalized
+  assert.equal(normalizeIp('::ffff:192.168.1.50'), '192.168.1.50'); // IPv4-mapped IPv6 unwrapped
+
+  // Anything that isn't a valid dotted IPv4 becomes '' so callers can drop it.
+  assert.equal(normalizeIp(''), '');
+  assert.equal(normalizeIp(undefined), '');
+  assert.equal(normalizeIp('not-an-ip'), '');
+  assert.equal(normalizeIp('192.168.1'), '');
+  assert.equal(normalizeIp('192.168.1.256'), ''); // octet out of range
+  assert.equal(normalizeIp('::1'), ''); // IPv6 loopback is not IPv4
+});
+
+test('buildIpWhitelist drops blanks/malformed entries and dedupes', () => {
+  const { buildIpWhitelist } = plugin.internal;
+
+  // Empty/absent input yields an empty (allow-all) list.
+  assert.deepEqual(buildIpWhitelist(), []);
+  assert.deepEqual(buildIpWhitelist([]), []);
+  assert.deepEqual(buildIpWhitelist(['', '   ']), []);
+
+  // Valid entries are canonicalized; junk is dropped; duplicates collapse.
+  assert.deepEqual(
+    buildIpWhitelist(['192.168.1.50', ' 10.0.0.1 ', 'garbage', '192.168.001.050', '10.0.0.1']),
+    ['192.168.1.50', '10.0.0.1'],
+  );
+});
+
+test('isClientAllowed allows all when empty, else only listed IPs', () => {
+  const { isClientAllowed } = plugin.internal;
+
+  // Empty/absent whitelist means allow-all — even an unparseable address.
+  assert.equal(isClientAllowed('192.168.1.50', []), true);
+  assert.equal(isClientAllowed('192.168.1.50', undefined), true);
+  assert.equal(isClientAllowed(undefined, []), true);
+
+  const list = ['192.168.1.50', '10.0.0.1'];
+  assert.equal(isClientAllowed('192.168.1.50', list), true);
+  assert.equal(isClientAllowed('::ffff:10.0.0.1', list), true); // mapped form matches
+  assert.equal(isClientAllowed('192.168.1.51', list), false);
+  // A non-IPv4 remote address can never match an active whitelist.
+  assert.equal(isClientAllowed('::1', list), false);
+  assert.equal(isClientAllowed(undefined, list), false);
+});
+
 test('the factory returns the Signal K plugin interface', () => {
   const p = plugin(mockApp());
   assert.equal(p.id, 'signalk-navico-embedder');
@@ -109,6 +161,9 @@ test('the config schema declares the documented options', () => {
   assert.equal(props.serverPort.type, 'number');
   assert.equal(props.ip.type, 'string');
   assert.equal(props.skToken.type, 'string');
+  assert.equal(props.ipWhitelist.type, 'array');
+  assert.equal(props.ipWhitelist.items.type, 'string');
+  assert.deepEqual(props.ipWhitelist.default, []);
   assert.equal(props.apps.type, 'array');
 });
 

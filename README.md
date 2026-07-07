@@ -33,8 +33,9 @@ configurator that replaces the generic settings form:
 3. **Proxy port** — the HTTP port this proxy listens on (default: `8080`).
 4. **Signal K server port** — leave blank to auto-detect (`PORT` env var, then the server's configured port, then `3000`). Set this only if the proxy cannot reach the Signal K server on the detected port.
 5. **Signal K authentication token** — see [Authentication](#authentication) below.
-6. **Auto-discovery** — the panel scans the Signal K server for installed web apps as soon as it opens (shown with a spinner) and adds any new ones to the list below, starting **disabled** so you opt in explicitly. There's no manual discover button; it re-scans automatically every time you open the panel.
-7. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
+6. **Client IP whitelist** — restrict which clients may connect to the proxy. See [Client IP whitelist](#client-ip-whitelist) below.
+7. **Auto-discovery** — the panel scans the Signal K server for installed web apps as soon as it opens (shown with a spinner) and adds any new ones to the list below, starting **disabled** so you opt in explicitly. There's no manual discover button; it re-scans automatically every time you open the panel.
+8. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
    - drag to reorder,
    - edit the **name** and **description** shown on the tile,
    - toggle the **Enabled** checkbox (disabled apps are kept in the list but not announced).
@@ -108,6 +109,15 @@ Because the proxy injects the token into every upstream request, it will only fo
 - **`/signalk-navico-embedder/`** — this plugin's own app-chooser page (the tile announced in launcher mode).
 
 Everything else returns `403 Forbidden`. Notably the Signal K admin UI (`/admin`) is only reachable through the proxy if you enable the auto-discovered **SignalK Admin** app — so exposing it on the MFD is a deliberate, visible choice.
+
+## Client IP whitelist
+
+By default the proxy accepts connections from any client that can reach its port. To lock it down to specific devices, add one or more **IPv4 addresses** to the **Client IP whitelist** in the plugin config panel:
+
+- Leave the list **empty** (the default) and any client may connect.
+- Add one or more addresses and the whitelist becomes **active** — only clients whose IP is on the list may connect; every other client receives `403 Forbidden`, and disallowed WebSocket upgrades are dropped.
+
+Add the MFD's own IPv4 address (find it in the MFD's network settings) plus any other devices you want to allow. The check runs before path routing, so a blocked client can't reach anything — not even the proxy's local icon route. Note the whitelist has no implicit exceptions: if you enable it, only the addresses you list get through (add `127.0.0.1` if you also want to reach the proxy from the Signal K server host itself). If the MFD gets its address via DHCP, consider a static lease so the whitelist doesn't lock it out on a lease change.
 
 ## Verified Hardware
 
