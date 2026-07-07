@@ -8,6 +8,7 @@ const {
   getServerPort,
   buildAnnouncement,
   buildAppModel,
+  applyGlyphFallbacks,
   FALLBACK_ICON_ROUTE,
   LAUNCHER_PATH,
 } = internal;
@@ -167,4 +168,18 @@ test('buildAppModel tolerates a missing apps array', () => {
   assert.deepEqual(model.apps, []);
   assert.deepEqual(model.webapps, []);
   assert.deepEqual(model.enabledApps, []);
+});
+
+test('applyGlyphFallbacks swaps glyphs from Unicode blocks the MFD font lacks', () => {
+  assert.equal(applyGlyphFallbacks('High tide ⤒'), 'High tide ↑');
+  assert.equal(applyGlyphFallbacks('Low tide ⤓'), 'Low tide ↓');
+  assert.equal(applyGlyphFallbacks('⤒⤓⤒'), '↑↓↑');
+  assert.equal(applyGlyphFallbacks('Close ✕'), 'Close ×');
+  assert.equal(applyGlyphFallbacks('📍 Vessel position'), '● Vessel position');
+});
+
+test('applyGlyphFallbacks leaves already-safe arrows and unrelated text untouched', () => {
+  assert.equal(applyGlyphFallbacks('Rising ↗ Falling ↘'), 'Rising ↗ Falling ↘');
+  assert.equal(applyGlyphFallbacks('plain text, no icons'), 'plain text, no icons');
+  assert.equal(applyGlyphFallbacks(''), '');
 });

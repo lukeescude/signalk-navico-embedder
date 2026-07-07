@@ -92,6 +92,30 @@ minMaxFallbackPlugin.postcss = true;
 // headings on the MFD even though the same page looks fine in a modern browser.
 const cssProcessor = postcss([minMaxFallbackPlugin(), postcssPresetEnv({ browsers: 'Chrome >= 69' })]);
 
+// Apps commonly render icons as bare Unicode characters instead of an icon font or
+// SVG (e.g. Signal K Tides' tide-state indicators, its modal close button, and its
+// vessel-position marker). That's fine on a desktop browser with a rich font-fallback
+// chain (and, for emoji, a color-emoji font), but the MFD's embedded Chromium ships a
+// minimal font that only covers common blocks like Arrows (U+2190-21FF) and has no
+// emoji font at all. Rarer blocks — Supplemental Arrows-B (U+2900-297F), Dingbats
+// (U+2700-27BF), and any emoji — are typically missing entirely, so those glyphs
+// render as blank boxes. Substituting a visually-similar character from a
+// near-universally-supported block fixes rendering without touching the app itself.
+const GLYPH_FALLBACKS = {
+  '⤒': '↑', // ⤒ upwards arrow to bar -> ↑ upwards arrow
+  '⤓': '↓', // ⤓ downwards arrow to bar -> ↓ downwards arrow
+  '✕': '×', // ✕ multiplication X (Dingbats) -> × multiplication sign (Latin-1)
+  '📍': '●', // 📍 round pushpin (emoji) -> ● black circle (Geometric Shapes)
+};
+// 'u' flag is required so the astral pin emoji (a surrogate pair) is treated as one
+// code point inside the character class, not two lone surrogates that could
+// mis-match elsewhere.
+const GLYPH_FALLBACK_PATTERN = new RegExp(`[${Object.keys(GLYPH_FALLBACKS).join('')}]`, 'gu');
+
+function applyGlyphFallbacks(text) {
+  return text.replace(GLYPH_FALLBACK_PATTERN, (ch) => GLYPH_FALLBACKS[ch]);
+}
+
 // Polyfills for APIs missing in the MFD's embedded Chromium (< Chrome 73).
 const POLYFILLS_SCRIPT = `<script>
 (function(w) {
@@ -566,6 +590,7 @@ module.exports = function (app) {
             proxyRes.on('data', (chunk) => chunks.push(chunk));
             proxyRes.on('end', () => {
               let body = Buffer.concat(chunks).toString('utf8');
+              body = applyGlyphFallbacks(body);
               const tokenScript = skToken
                 ? '<script>window.SK_TOKEN=' + JSON.stringify(skToken) + ';</script>\n'
                 : '';
@@ -578,7 +603,7 @@ module.exports = function (app) {
             const chunks = [];
             proxyRes.on('data', (chunk) => chunks.push(chunk));
             proxyRes.on('end', async () => {
-              const source = Buffer.concat(chunks).toString('utf8');
+              const source = applyGlyphFallbacks(Buffer.concat(chunks).toString('utf8'));
               try {
                 const result = await esbuild.transform(source, { target: 'chrome69', loader: 'js', minify: true });
                 delete headers['content-length'];
@@ -787,6 +812,7 @@ module.exports.internal = {
   normalizeIp,
   buildIpWhitelist,
   isClientAllowed,
+  applyGlyphFallbacks,
   FALLBACK_ICON_ROUTE,
   LAUNCHER_PATH,
 };

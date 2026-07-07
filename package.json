@@ -50,7 +50,8 @@
     "recommends": [
       "hoekens-anchor-alarm",
       "signalk-watch-schedule",
-      "signalk-sailsense"
+      "signalk-sailsense",
+      "signalk-tides"
     ],
     "screenshots": [
       "./screenshots/home-screen.png",

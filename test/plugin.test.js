@@ -28,6 +28,7 @@ test('module exports a plugin factory and pure internal helpers', () => {
     'normalizeIp',
     'buildIpWhitelist',
     'isClientAllowed',
+    'applyGlyphFallbacks',
   ]) {
     assert.equal(typeof plugin.internal[name], 'function', `internal.${name} should be a function`);
   }
