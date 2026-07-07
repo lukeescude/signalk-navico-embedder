@@ -299,12 +299,18 @@ function toPrefix(p) {
 }
 
 // The set of path prefixes the proxy will forward: the always-allowed fixed paths
-// plus one per enabled app. Anything outside this list is refused.
+// plus, per enabled app, both the app's own path and its plugin path. Webapps that
+// ship a server plugin fetch their config/API under /plugins/<app path> (e.g. an
+// app at /@signalk/freeboard-sk calls /plugins/@signalk/freeboard-sk), so that has
+// to be allowed too. Anything outside this list is refused.
 function buildAllowedPrefixes(enabledApps) {
   const prefixes = new Set(ALWAYS_ALLOWED_PREFIXES);
   for (const a of enabledApps || []) {
     const prefix = toPrefix(a && a.url);
-    if (prefix) prefixes.add(prefix);
+    if (prefix) {
+      prefixes.add(prefix);
+      prefixes.add(`/plugins${prefix}`);
+    }
   }
   return [...prefixes];
 }

@@ -39,8 +39,9 @@ test('buildAllowedPrefixes always includes /signalk and the launcher, plus enabl
   // No apps: just the fixed prefixes.
   assert.deepEqual(buildAllowedPrefixes([]), ['/signalk', '/signalk-navico-embedder']);
 
-  // App paths are normalized to a trailing-slash-free prefix; blank/root urls are
-  // dropped so they can't collapse the allowlist into allow-all.
+  // App paths are normalized to a trailing-slash-free prefix; each enabled app also
+  // gets its /plugins/<app path> so the webapp can reach its own plugin config/API.
+  // Blank/root urls are dropped so they can't collapse the allowlist into allow-all.
   const prefixes = buildAllowedPrefixes([
     { url: '/@signalk/freeboard-sk/' },
     { url: 'admin/' },
@@ -52,7 +53,9 @@ test('buildAllowedPrefixes always includes /signalk and the launcher, plus enabl
     '/signalk',
     '/signalk-navico-embedder',
     '/@signalk/freeboard-sk',
+    '/plugins/@signalk/freeboard-sk',
     '/admin',
+    '/plugins/admin',
   ]);
 });
 
@@ -75,6 +78,13 @@ test('isPathAllowed matches by path segment, not string prefix', () => {
   assert.equal(isPathAllowed('/', prefixes), false);
   assert.equal(isPathAllowed('/skServer/webapps', prefixes), false);
   assert.equal(isPathAllowed('/plugins/foo', prefixes), false);
+
+  // A /plugins prefix for an enabled app matches its config/API sub-paths, but a
+  // sibling plugin that wasn't enabled stays blocked.
+  const withPlugin = ['/signalk', '/plugins/@signalk/freeboard-sk'];
+  assert.equal(isPathAllowed('/plugins/@signalk/freeboard-sk', withPlugin), true);
+  assert.equal(isPathAllowed('/plugins/@signalk/freeboard-sk/config', withPlugin), true);
+  assert.equal(isPathAllowed('/plugins/@signalk/other-plugin', withPlugin), false);
 });
 
 test('isPathAllowed resolves traversal before matching', () => {
