@@ -77,7 +77,7 @@ minMaxFallbackPlugin.postcss = true;
 // parse. Unrecognized at-rules like @layer are dropped wholesale by old browsers,
 // which silently deletes an app's reset/base styles — seen as huge default-UA-styled
 // headings on the MFD even though the same page looks fine in a modern browser.
-const cssProcessor = postcss([minMaxFallbackPlugin(), postcssPresetEnv({ browsers: 'Chrome >= 70' })]);
+const cssProcessor = postcss([minMaxFallbackPlugin(), postcssPresetEnv({ browsers: 'Chrome >= 69' })]);
 
 // Polyfills for APIs missing in the MFD's embedded Chromium (< Chrome 73).
 const POLYFILLS_SCRIPT = `<script>
@@ -287,8 +287,8 @@ module.exports = function (app) {
     schema: {
       type: 'object',
       description:
-        'Configure this plugin from Server → Plugin Config. Use the embedded "Discover Installed Webapps" '
-        + 'button to auto-detect web apps, then enable the ones you want to appear as tiles on the MFD.',
+        'Configure this plugin from Server → Plugin Config. Installed web apps are auto-detected when the '
+        + 'panel opens; enable the ones you want to appear as tiles on the MFD.',
       required: [],
       properties: {
         mode: {
@@ -328,7 +328,7 @@ module.exports = function (app) {
           title: 'MFD Apps',
           description:
             'Web apps to announce as tiles on the MFD. Installed webapps are added here automatically '
-            + 'by the Discover button. Reorder, disable, or override name/description as needed.',
+            + 'when the panel opens. Reorder, disable, or override name/description as needed.',
           default: [],
           items: {
             type: 'object',
@@ -343,7 +343,7 @@ module.exports = function (app) {
                 title: 'Icon',
                 description:
                   'Icon shown on the MFD tile — a server-relative path (e.g. /@signalk/freeboard-sk/icon.png) '
-                  + 'or an absolute http(s) URL. Set automatically by Discover; leave blank to use the default icon.',
+                  + 'or an absolute http(s) URL. Set automatically by auto-discovery; leave blank to use the default icon.',
               },
             },
           },
@@ -445,7 +445,7 @@ module.exports = function (app) {
             proxyRes.on('end', async () => {
               const source = Buffer.concat(chunks).toString('utf8');
               try {
-                const result = await esbuild.transform(source, { target: 'chrome70', loader: 'js', minify: true });
+                const result = await esbuild.transform(source, { target: 'chrome69', loader: 'js', minify: true });
                 delete headers['content-length'];
                 res.writeHead(proxyRes.statusCode, headers);
                 res.end(result.code);

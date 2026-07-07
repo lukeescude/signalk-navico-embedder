@@ -21,7 +21,7 @@ jobs:
       - name: Extract release notes from CHANGELOG.md
         run: |
           awk -v ver="# ${GITHUB_REF_NAME}" '
-            $0 == ver { found = 1; next }
+            index($0, ver) == 1 && ($0 == ver || substr($0, length(ver) + 1, 2) == " (") { found = 1; next }
             found && /^# v/ { exit }
             found { print }
           ' CHANGELOG.md > release-notes.md

@@ -32,9 +32,10 @@ npm run format:check
 ### 2. Edit two files:
 
 - [package.json](package.json) — bump the `version` field
-- [CHANGELOG.md](CHANGELOG.md) — add a new `# vX.Y.Z` section at the top
-  matching the style of previous entries (the version heading must match the
-  tag exactly, e.g. tag `v2.4.0` → heading `# v2.4.0`)
+- [CHANGELOG.md](CHANGELOG.md) — add a new `# vX.Y.Z (YYYY-MM-DD)` section at
+  the top matching the style of previous entries (the version part of the
+  heading must match the tag exactly, e.g. tag `v2.4.0` → heading starting
+  `# v2.4.0 (...)`; the publish workflow matches on that prefix)
 
 ### 3. Commit:
 
