@@ -38,7 +38,7 @@ test('buildAllowedPrefixes always includes /signalk and the launcher, plus enabl
   const { buildAllowedPrefixes } = plugin.internal;
 
   // No apps: just the fixed prefixes.
-  assert.deepEqual(buildAllowedPrefixes([]), ['/signalk', '/signalk-navico-embedder']);
+  assert.deepEqual(buildAllowedPrefixes([]), ['/signalk', '/skServer/loginStatus', '/signalk-navico-embedder']);
 
   // App paths are normalized to a trailing-slash-free prefix; each enabled app also
   // gets its /plugins/<app path> so the webapp can reach its own plugin config/API.
@@ -52,6 +52,7 @@ test('buildAllowedPrefixes always includes /signalk and the launcher, plus enabl
   ]);
   assert.deepEqual(prefixes, [
     '/signalk',
+    '/skServer/loginStatus',
     '/signalk-navico-embedder',
     '/@signalk/freeboard-sk',
     '/plugins/@signalk/freeboard-sk',
