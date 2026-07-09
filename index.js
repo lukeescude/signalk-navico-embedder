@@ -24,6 +24,7 @@ const LAUNCHER_PATH = '/signalk-navico-embedder/';
 // Path prefixes the proxy always forwards regardless of the configured app list:
 //   /signalk                  — all Signal K REST APIs and the WebSocket stream
 //                               live here; every proxied app needs it to function.
+//   /skServer/loginStatus     — a special auth page for checking login status
 //   /signalk-navico-embedder  — this plugin's own app-chooser page and its assets
 //                               (served from /public); the announced tile in
 //                               launcher mode.
@@ -32,7 +33,7 @@ const LAUNCHER_PATH = '/signalk-navico-embedder/';
 // visible choice rather than an open door. See buildAllowedPrefixes/isPathAllowed:
 // the proxy injects an auth token into every upstream request, so an unrestricted
 // path list would turn it into an open, authenticated gateway to the whole server.
-const ALWAYS_ALLOWED_PREFIXES = ['/signalk', LAUNCHER_PATH.replace(/\/+$/, '')];
+const ALWAYS_ALLOWED_PREFIXES = ['/signalk', '/skServer/loginStatus', LAUNCHER_PATH.replace(/\/+$/, '')];
 
 const STRIP_RESPONSE_HEADERS = new Set([
   'x-frame-options',
