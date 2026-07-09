@@ -382,9 +382,15 @@ export default function PluginConfigurationPanel({ configuration, save }) {
       }
 
       const current = appsRef.current
+      const discoveredByUrl = new Map(webapps.map((w) => [w.url, w]))
       const existingUrls = new Set(current.map((a) => a.url))
       let added = 0
-      const merged = [...current]
+      // Refresh icons on existing entries so a webapp that changed its icon
+      // (or gained one) shows the newest icon rather than the stale saved path.
+      const merged = current.map((a) => {
+        const w = discoveredByUrl.get(a.url)
+        return w ? { ...a, icon: w.icon || '' } : a
+      })
       for (const w of webapps) {
         if (!existingUrls.has(w.url)) {
           merged.push({
