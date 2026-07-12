@@ -32,7 +32,7 @@ const S = {
   status: { marginTop: 8, fontSize: 12, minHeight: 18 },
   item: {
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 10,
     padding: '10px 12px',
     background: '#f8f9fa',
@@ -40,8 +40,37 @@ const S = {
     borderRadius: 8,
     marginBottom: 6
   },
-  itemDisabled: { opacity: 0.45 },
   dragOver: { borderColor: '#3b82f6', background: '#eef4ff' },
+  itemDisabled: { opacity: 0.55, background: '#eceef0' },
+  listWrap: { marginBottom: 4 },
+  listLabel: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#666',
+    margin: '14px 0 6px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8
+  },
+  countBadge: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#888',
+    background: '#eee',
+    borderRadius: 10,
+    padding: '1px 8px'
+  },
+  list: {
+    minHeight: 44,
+    padding: 6,
+    border: '1px dashed #ddd',
+    borderRadius: 10,
+    background: '#fff',
+    transition: 'background 0.12s, border-color 0.12s'
+  },
+  listDisabled: { background: '#fafafa' },
+  listOver: { borderColor: '#3b82f6', background: '#eef4ff' },
+  emptyList: { textAlign: 'center', padding: '16px 12px', color: '#bbb', fontSize: 12 },
   handle: {
     color: '#bbb',
     fontSize: 16,
@@ -49,12 +78,11 @@ const S = {
     userSelect: 'none',
     flexShrink: 0,
     width: 18,
-    textAlign: 'center',
-    paddingTop: 8
+    textAlign: 'center'
   },
   iconBox: {
-    width: 36,
-    height: 36,
+    width: 48,
+    height: 48,
     borderRadius: 8,
     display: 'flex',
     alignItems: 'center',
@@ -62,12 +90,11 @@ const S = {
     background: '#e2e8f0',
     overflow: 'hidden',
     flexShrink: 0,
-    fontSize: 18,
-    marginTop: 2
+    fontSize: 20
   },
   iconImg: { width: '100%', height: '100%', objectFit: 'contain', padding: 5 },
   info: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 },
-  toggle: { flexShrink: 0, paddingTop: 8, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 },
+  toggle: { flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 },
   checkbox: { width: 16, height: 16, cursor: 'pointer', accentColor: '#3b82f6' },
   empty: { textAlign: 'center', padding: '30px 16px', color: '#999', fontSize: 13 },
   fieldRow: { display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
@@ -93,7 +120,7 @@ const S = {
     color: '#333',
     width: '100%'
   },
-  appInputName: { fontWeight: 600 },
+  appInputName: { fontWeight: 600, maxWidth: 280 },
   actions: { display: 'flex', gap: 10, alignItems: 'center', marginTop: 16 },
   hint: { fontSize: 11, color: '#aaa' },
   link: { color: '#3b82f6', fontWeight: 600, textDecoration: 'none' },
@@ -230,8 +257,12 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   const [statusError, setStatusError] = useState(false)
   const [discovering, setDiscovering] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [dragIdx, setDragIdx] = useState(null)
-  const [overIdx, setOverIdx] = useState(null)
+  // Drag state for the two app lists. A descriptor is
+  // { list: 'enabled' | 'disabled', index } where index is per-list, since the
+  // lists are indexed independently. `drag` also carries the item's global
+  // index into `apps` so a cross-list move can target it directly.
+  const [drag, setDrag] = useState(null)
+  const [over, setOver] = useState(null)
 
   // Access-request token generation state.
   // tokenState: '' | 'pending' | 'approved' | 'denied' | 'error'
@@ -426,32 +457,163 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   }, [discover])
 
   const updateApp = (i, patch) => setApps(apps.map((a, j) => (j === i ? { ...a, ...patch } : a)))
-  const toggleApp = (i) => updateApp(i, { enabled: apps[i].enabled === false })
+
+  // Move an app to the other list. Enabling drops it at the bottom of the
+  // enabled group; disabling drops it at the top of the disabled group. Both
+  // land at the same spot — the boundary between the groups — so `apps` stays
+  // ordered as [...enabled, ...disabled], which is also the announce order the
+  // backend reads.
+  const setAppEnabled = (i, enabled) => {
+    const target = apps[i]
+    if (!target) return
+    const rest = apps.filter((_, j) => j !== i)
+    const moved = { ...target, enabled }
+    const stillEnabled = rest.filter((a) => a.enabled !== false)
+    const stillDisabled = rest.filter((a) => a.enabled === false)
+    setApps([...stillEnabled, moved, ...stillDisabled])
+  }
+
+  // Reorder within a single list, preserving the [...enabled, ...disabled]
+  // ordering of the underlying array.
+  const reorderWithinList = (list, fromIdx, toIdx) => {
+    const enabledArr = apps.filter((a) => a.enabled !== false)
+    const disabledArr = apps.filter((a) => a.enabled === false)
+    const arr = list === 'enabled' ? enabledArr : disabledArr
+    const [moved] = arr.splice(fromIdx, 1)
+    arr.splice(toIdx, 0, moved)
+    setApps([...enabledArr, ...disabledArr])
+  }
 
   const addIp = () => setIpWhitelist([...ipWhitelist, ''])
   const updateIp = (i, val) => setIpWhitelist(ipWhitelist.map((ip, j) => (j === i ? val : ip)))
   const removeIp = (i) => setIpWhitelist(ipWhitelist.filter((_, j) => j !== i))
 
-  const onDragStart = (i) => setDragIdx(i)
-  const onDragOver = (e, i) => {
-    e.preventDefault()
-    setOverIdx(i)
-  }
-  const onDragLeave = () => setOverIdx(null)
-  const onDrop = (e, dropIdx) => {
-    e.preventDefault()
-    setOverIdx(null)
-    if (dragIdx !== null && dragIdx !== dropIdx) {
-      const next = [...apps]
-      const [moved] = next.splice(dragIdx, 1)
-      next.splice(dropIdx, 0, moved)
-      setApps(next)
-    }
-    setDragIdx(null)
-  }
+  const onDragStart = (list, index, globalIdx) => setDrag({ list, index, globalIdx })
   const onDragEnd = () => {
-    setDragIdx(null)
-    setOverIdx(null)
+    setDrag(null)
+    setOver(null)
+  }
+  const onItemDragOver = (e, list, index) => {
+    e.preventDefault()
+    e.stopPropagation() // don't let the list container also claim the hover
+    setOver({ list, index })
+  }
+  const onListDragOver = (e, list, index) => {
+    e.preventDefault()
+    setOver({ list, index })
+  }
+  const onListDragLeave = (e) => {
+    // Ignore moves onto a child; only clear when the pointer leaves the list.
+    if (!e.currentTarget.contains(e.relatedTarget)) setOver(null)
+  }
+
+  const handleDrop = (targetList, targetIndex) => {
+    if (drag) {
+      if (drag.list === targetList) {
+        // Same list — reorder to the drop position.
+        if (drag.index !== targetIndex) reorderWithinList(targetList, drag.index, targetIndex)
+      } else {
+        // Other list — enable/disable; position follows the bottom/top rule.
+        setAppEnabled(drag.globalIdx, targetList === 'enabled')
+      }
+    }
+    setDrag(null)
+    setOver(null)
+  }
+  const onItemDrop = (e, list, index) => {
+    e.preventDefault()
+    e.stopPropagation()
+    handleDrop(list, index)
+  }
+  const onListDrop = (e, list, index) => {
+    e.preventDefault()
+    handleDrop(list, index)
+  }
+
+  // Split the single apps array into the two rendered lists, keeping each app's
+  // index into `apps` so in-place edits (label/toggle) can find it.
+  const enabledEntries = []
+  const disabledEntries = []
+  apps.forEach((app, idx) => {
+    ; (app.enabled === false ? disabledEntries : enabledEntries).push({ app, idx })
+  })
+
+  const renderApp = ({ app, idx }, list, localIdx) => {
+    const isEnabled = list === 'enabled'
+    const isDragging = drag && drag.list === list && drag.index === localIdx
+    const isItemOver =
+      !isDragging && drag && over && drag.list === list && over.list === list && over.index === localIdx
+    return (
+      <div
+        key={app.url + '#' + idx}
+        onDragOver={(e) => onItemDragOver(e, list, localIdx)}
+        onDrop={(e) => onItemDrop(e, list, localIdx)}
+        style={{
+          ...S.item,
+          ...(isEnabled ? {} : S.itemDisabled),
+          ...(isItemOver ? S.dragOver : {}),
+          ...(isDragging ? { opacity: 0.4 } : {})
+        }}
+      >
+        <span
+          style={S.handle}
+          draggable
+          onDragStart={() => onDragStart(list, localIdx, idx)}
+          onDragEnd={onDragEnd}
+          title="Drag to reorder, or to the other list to enable/disable"
+        >
+          {'≡'}
+        </span>
+        <IconPreview icon={app.icon} label={app.label || app.url} />
+        <div style={S.info}>
+          <input
+            style={{ ...S.appInput, ...S.appInputName }}
+            type="text"
+            value={app.label || ''}
+            placeholder="Tile name"
+            onChange={(e) => updateApp(idx, { label: e.target.value })}
+          />
+        </div>
+        <label style={S.toggle} title={isEnabled ? 'Click to disable' : 'Click to enable'}>
+          <input
+            type="checkbox"
+            checked={isEnabled}
+            onChange={() => setAppEnabled(idx, !isEnabled)}
+            style={S.checkbox}
+          />
+          <span>Enabled</span>
+        </label>
+      </div>
+    )
+  }
+
+  const renderList = (title, list, entries, emptyHint) => {
+    const isContainerOver =
+      over && drag && over.list === list && (drag.list !== list || over.index === entries.length)
+    return (
+      <div style={S.listWrap}>
+        <div style={S.listLabel}>
+          {title}
+          <span style={S.countBadge}>{entries.length}</span>
+        </div>
+        <div
+          onDragOver={(e) => onListDragOver(e, list, entries.length)}
+          onDragLeave={onListDragLeave}
+          onDrop={(e) => onListDrop(e, list, entries.length)}
+          style={{
+            ...S.list,
+            ...(list === 'disabled' ? S.listDisabled : {}),
+            ...(isContainerOver ? S.listOver : {})
+          }}
+        >
+          {entries.length === 0 ? (
+            <div style={S.emptyList}>{emptyHint}</div>
+          ) : (
+            entries.map((entry, li) => renderApp(entry, list, li))
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -576,7 +738,11 @@ export default function PluginConfigurationPanel({ configuration, save }) {
         </button>
       </div>
 
-      <div style={S.sectionTitle}>MFD Apps (drag to reorder)</div>
+      <div style={S.sectionTitle}>MFD Apps</div>
+      <div style={{ ...S.hint, marginBottom: 4 }}>
+        Drag an app between the lists to enable or disable it, or reorder within a list. Enabled apps are
+        announced to the MFD in the order shown.
+      </div>
       {discovering ? (
         <div style={S.loading}>
           <span style={S.spinner} /> Discovering installed webapps…
@@ -589,58 +755,10 @@ export default function PluginConfigurationPanel({ configuration, save }) {
           {discovering ? 'Loading installed webapps…' : 'No webapps found. Is the server fully started?'}
         </div>
       ) : (
-        <div>
-          {apps.map((app, i) => (
-            <div
-              key={app.url + i}
-              onDragOver={(e) => onDragOver(e, i)}
-              onDragLeave={onDragLeave}
-              onDrop={(e) => onDrop(e, i)}
-              style={{
-                ...S.item,
-                ...(app.enabled === false ? S.itemDisabled : {}),
-                ...(overIdx === i ? S.dragOver : {}),
-                ...(dragIdx === i ? { opacity: 0.4 } : {})
-              }}
-            >
-              <span
-                style={S.handle}
-                draggable
-                onDragStart={() => onDragStart(i)}
-                onDragEnd={onDragEnd}
-                title="Drag to reorder"
-              >
-                {'≡'}
-              </span>
-              <IconPreview icon={app.icon} label={app.label || app.url} />
-              <div style={S.info}>
-                <input
-                  style={{ ...S.appInput, ...S.appInputName }}
-                  type="text"
-                  value={app.label || ''}
-                  placeholder="Tile name"
-                  onChange={(e) => updateApp(i, { label: e.target.value })}
-                />
-                <input
-                  style={S.appInput}
-                  type="text"
-                  value={app.description || ''}
-                  placeholder="Description (optional)"
-                  onChange={(e) => updateApp(i, { description: e.target.value })}
-                />
-              </div>
-              <label style={S.toggle} title="Enabled">
-                <input
-                  type="checkbox"
-                  checked={app.enabled !== false}
-                  onChange={() => toggleApp(i)}
-                  style={S.checkbox}
-                />
-                <span>Enabled</span>
-              </label>
-            </div>
-          ))}
-        </div>
+        <>
+          {renderList('Enabled Webapps', 'enabled', enabledEntries, 'No apps enabled. Drag one here or tick its box to enable it.')}
+          {renderList('Disabled Webapps', 'disabled', disabledEntries, 'No apps disabled.')}
+        </>
       )}
 
       <div style={S.actions}>
