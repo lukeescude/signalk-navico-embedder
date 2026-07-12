@@ -138,6 +138,9 @@ Add the MFD's own IPv4 address (find it in the MFD's network settings) plus any 
 | ✅     | [signalk-instrumentpanel](https://www.npmjs.com/package/signalk-instrumentpanel) |                                                       |
 | ✅     | [signalk-sun-moon](https://www.npmjs.com/package/signalk-sun-moon)               |                                                       |
 | ✅     | [signalk-tides](https://www.npmjs.com/package/signalk-tides)                     |                                                       |
+| ✅     | [caveman-chartplotter](https://www.npmjs.com/package/caveman-chartplotter)       |                                                       |
+| ✅     | [signalk-maintenance-tracker](https://www.npmjs.com/package/signalk-maintenance-tracker) |                                             |
+| ✅     | [signalk-stowage-mgmt](https://www.npmjs.com/package/signalk-stowage-mgmt)       |                                                       |
 | ⚠️    | SignalK Admin                                                                    | Works, but is extremely slow                          |
 | ⚠️    | [KIP](https://www.npmjs.com/package/@mxtommy/kip)                                | Loads, but doesn't see auth token and doesn't update. |
 | ❌     | [Freeboard](https://www.npmjs.com/package/@signalk/freeboard-sk)                 | Doesn't load.                                         |

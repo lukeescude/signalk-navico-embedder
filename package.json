@@ -51,7 +51,8 @@
       "hoekens-anchor-alarm",
       "signalk-watch-schedule",
       "signalk-sailsense",
-      "signalk-tides"
+      "signalk-tides",
+      "caveman-chartplotter"
     ],
     "screenshots": [
       "./screenshots/home-screen.png",
