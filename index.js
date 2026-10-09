@@ -514,6 +514,18 @@ module.exports = function (app) {
       const publish = () => {
         if (apps.length === 0) return;
         const socket = dgram.createSocket('udp4');
+        // If the bind fails (the address is not one of this machine's, or it has
+        // changed), 'listening' never fires and the socket was never closed: one
+        // leaked every PUBLISH_INTERVAL until the server ran out of file handles
+        // (EMFILE) and stopped accepting connections.
+        socket.on('error', (err) => {
+          app.error(`Multicast socket error on ${ip}: ${err.message}`);
+          try {
+            socket.close();
+          } catch {
+            // already closed
+          }
+        });
         socket.once('listening', () => {
           let pending = apps.length;
           const done = () => {
