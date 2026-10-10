@@ -127,7 +127,7 @@ Add the MFD's own IPv4 address (find it in the MFD's network settings) plus any 
 | ✅     | B&G  | Zeus 3S 12 | Chromium 69 |
 | ✅     | B&G  | Zeus 3S 16 | Chromium 69 |
 | ✅     | B&G  | Zeus 3 12  | Chromium 69 |
-| ✅     | Simrad | NSS 3S 12  | Chromium 69 |
+| ✅     | Simrad | NSS evo3S 12 | Chromium 69 |
 
 ## Verified Plugins
 
