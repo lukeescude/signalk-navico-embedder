@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const dgram = require('dgram');
 const os = require('os');
 const path = require('path');
@@ -242,6 +243,37 @@ function getServerPort(app, options) {
   );
 }
 
+// Where the proxy reaches the local Signal K server. With "Use SSL" on, Signal K
+// serves on its SSL port and its HTTP port only redirects to
+// https://127.0.0.1:<sslport>/... — a redirect the MFD cannot follow (127.0.0.1
+// is the MFD itself, and it could not trust the server's certificate anyway). So
+// when SSL is on the proxy talks HTTPS to the SSL port, and the MFD still gets
+// plain HTTP from the proxy. A `serverPort` override is the SSL port when SSL is on.
+function getServerTarget(app, options) {
+  const settings = (app.config && app.config.settings) || {};
+  const protocol = settings.ssl === true ? 'https' : 'http';
+  const port = protocol === 'https'
+    ? (options && options.serverPort) || Number(process.env.SSLPORT) || settings.sslport || 3443
+    : getServerPort(app, options);
+  return { protocol, port };
+}
+
+// A redirect from Signal K to one of its own local addresses (its HTTP or SSL
+// port on 127.0.0.1 / localhost) is rewritten to the proxy, so the MFD stays on
+// the proxy. Anything else (another host) is passed on unchanged.
+function rewriteLocation(location, localPorts, proxyOrigin) {
+  let u;
+  try {
+    u = new URL(location);
+  } catch {
+    return location;
+  }
+  if (!['127.0.0.1', 'localhost'].includes(u.hostname)) return location;
+  const port = Number(u.port) || (u.protocol === 'https:' ? 443 : 80);
+  if (!localPorts.includes(port)) return location;
+  return proxyOrigin + u.pathname + u.search + u.hash;
+}
+
 // Build the MFD UDP announcement payload for a single tile. Pure: depends only
 // on the advertised IP and the tile's resolved label/description/icon/url.
 function buildAnnouncement(ip, tile) {
@@ -455,7 +487,7 @@ module.exports = function (app) {
         serverPort: {
           type: 'number',
           title: 'Signal K server port override',
-          description: 'Leave blank to auto-detect (PORT env var, then the server\'s configured port, then 3000). Set this if the proxy cannot reach the Signal K server on the detected port.',
+          description: 'Leave blank to auto-detect (PORT env var, then the server\'s configured port, then 3000; with SSL on, SSLPORT, then the server\'s SSL port, then 3443). Set this if the proxy cannot reach the Signal K server on the detected port.',
         },
         skToken: {
           type: 'string',
@@ -506,12 +538,19 @@ module.exports = function (app) {
     start(options) {
       const ip = (options.ip && options.ip.trim()) || getLocalIp();
       const port = options.port || 8080;
-      const serverPort = getServerPort(app, options);
+      const target = getServerTarget(app, options);
+      const serverPort = target.port;
+      const upstream = target.protocol === 'https' ? https : http;
+      // Signal K's certificate is issued for its hostname, not 127.0.0.1, and the
+      // connection never leaves this machine, so it is not verified.
+      const upstreamTls = target.protocol === 'https' ? { rejectUnauthorized: false } : {};
+      const settings = (app.config && app.config.settings) || {};
+      const localPorts = [...new Set([serverPort, getServerPort(app, {}), Number(process.env.SSLPORT) || settings.sslport || 3443].map(Number))];
       const skToken = (options.skToken || '').trim();
 
       const serverUrl = `http://${ip}:${port}`;
       // Everything is proxied to the local Signal K server, which serves all webapps.
-      const targetParsed = new URL(`http://127.0.0.1:${serverPort}`);
+      const targetParsed = new URL(`${target.protocol}://127.0.0.1:${serverPort}`);
 
       // The tiles announced over UDP and the webapp list published as a delta are
       // both derived from the saved options — see buildAppModel.
@@ -617,14 +656,15 @@ module.exports = function (app) {
           path: req.url,
           method: req.method,
           headers: forwardHeaders,
+          ...upstreamTls,
         };
 
-        const proxyReq = http.request(reqOptions, (proxyRes) => {
+        const proxyReq = upstream.request(reqOptions, (proxyRes) => {
           const headers = {};
           for (const [k, v] of Object.entries(proxyRes.headers)) {
             if (!STRIP_RESPONSE_HEADERS.has(k.toLowerCase())) {
-              if (k.toLowerCase() === 'location' && v.startsWith(targetParsed.origin)) {
-                headers[k] = v.replace(targetParsed.origin, serverUrl);
+              if (k.toLowerCase() === 'location') {
+                headers[k] = rewriteLocation(v, localPorts, serverUrl);
               } else {
                 headers[k] = v;
               }
@@ -732,11 +772,12 @@ module.exports = function (app) {
           wsPath += (wsPath.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(skToken);
         }
 
-        const proxyReq = http.request({
+        const proxyReq = upstream.request({
           hostname: targetParsed.hostname,
           port: parseInt(targetParsed.port) || 80,
           path: wsPath,
           headers: wsHeaders,
+          ...upstreamTls,
         });
 
         // Manual timer covers only the upgrade handshake — cancelled on success or
@@ -854,6 +895,8 @@ module.exports.internal = {
   getLocalIp,
   getBroadcastAddress,
   getServerPort,
+  getServerTarget,
+  rewriteLocation,
   buildAnnouncement,
   buildAppModel,
   buildAllowedPrefixes,

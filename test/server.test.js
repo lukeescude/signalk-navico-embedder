@@ -629,3 +629,181 @@ test('stop() shuts the server down and reports stopped', async () => {
     await new Promise((resolve) => backend.server.close(resolve));
   }
 });
+
+// --- Signal K with "Use SSL" on -------------------------------------------
+// Signal K then serves on its SSL port, and its HTTP port only redirects to
+// https://127.0.0.1:<sslport>/…, which the MFD cannot follow. The proxy talks
+// HTTPS to Signal K and keeps serving the MFD plain HTTP.
+
+const https = require('node:https');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+// A throwaway self-signed certificate for the stand-in Signal K, made with the
+// openssl command line (no key is kept in the repository). Without openssl the
+// SSL tests are skipped.
+function makeTestCert() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'embedder-tls-'));
+  const key = path.join(dir, 'key.pem');
+  const cert = path.join(dir, 'cert.pem');
+  try {
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert,
+      '-days', '1', '-subj', '/CN=signalk.test'], { stdio: 'ignore' });
+    return { key: fs.readFileSync(key), cert: fs.readFileSync(cert) };
+  } catch {
+    return null;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+const tls = makeTestCert();
+const sslTest = tls ? test : test.skip;
+
+function startHttpsBackend(handler, onUpgrade) {
+  const requests = [];
+  const server = https.createServer(tls, (req, res) => {
+    requests.push({ method: req.method, url: req.url, headers: req.headers });
+    handler(req, res);
+  });
+  if (onUpgrade) server.on('upgrade', onUpgrade);
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port, requests }));
+  });
+}
+
+// A proxy started the way Signal K starts it with SSL on: settings.ssl and
+// settings.sslport, no serverPort override.
+async function setupSsl({ handler, onUpgrade, options = {} } = {}) {
+  const backend = await startHttpsBackend(handler || ((req, res) => res.end('ok')), onUpgrade);
+  const proxyPort = await freePort();
+  const app = mockApp();
+  app.config.settings = { ssl: true, sslport: backend.port, port: 1 };
+  const p = plugin(app);
+  const dg = fakeDgram();
+  p.start({ ip: '127.0.0.1', port: proxyPort, apps: [], ...options });
+  await waitForProxy(proxyPort);
+  return {
+    app,
+    backend,
+    proxyPort,
+    get: (p2, headers) => httpGet(proxyPort, p2, headers),
+    async cleanup() {
+      p.stop();
+      dg.restore();
+      await new Promise((resolve) => backend.server.close(resolve));
+    },
+  };
+}
+
+test('getServerTarget follows Signal K\'s SSL setting', () => {
+  const { getServerTarget } = plugin.internal;
+  const app = (settings) => ({ config: { settings } });
+  const saved = { PORT: process.env.PORT, SSLPORT: process.env.SSLPORT };
+  delete process.env.PORT;
+  delete process.env.SSLPORT;
+  try {
+    assert.deepEqual(getServerTarget(app({}), {}), { protocol: 'http', port: 3000 });
+    assert.deepEqual(getServerTarget(app({ port: 3001 }), {}), { protocol: 'http', port: 3001 });
+    assert.deepEqual(getServerTarget(app({ ssl: true }), {}), { protocol: 'https', port: 3443 });
+    assert.deepEqual(getServerTarget(app({ ssl: true, sslport: 4443, port: 3001 }), {}), { protocol: 'https', port: 4443 });
+    assert.deepEqual(getServerTarget(app({ ssl: true }), { serverPort: 5443 }), { protocol: 'https', port: 5443 });
+    process.env.SSLPORT = '6443';
+    assert.deepEqual(getServerTarget(app({ ssl: true, sslport: 4443 }), {}), { protocol: 'https', port: 6443 });
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('rewriteLocation keeps a redirect to Signal K\'s own local addresses on the proxy', () => {
+  const { rewriteLocation } = plugin.internal;
+  const proxy = 'http://192.168.1.227:8080';
+  assert.equal(rewriteLocation('https://127.0.0.1:3443/czone/?a=1#x', [3000, 3443], proxy), `${proxy}/czone/?a=1#x`);
+  assert.equal(rewriteLocation('http://localhost:3000/signalk', [3000, 3443], proxy), `${proxy}/signalk`);
+  assert.equal(rewriteLocation('https://example.com/x', [3000, 3443], proxy), 'https://example.com/x');
+  assert.equal(rewriteLocation('https://127.0.0.1:9999/x', [3000, 3443], proxy), 'https://127.0.0.1:9999/x');
+  assert.equal(rewriteLocation('/relative/path', [3000, 3443], proxy), '/relative/path');
+});
+
+sslTest('with Signal K on SSL, pages are fetched over HTTPS and served to the MFD as HTTP', async () => {
+  const html = '<html><head><title>t</title></head><body>x</body></html>';
+  const ctx = await setupSsl({
+    options: { skToken: 'tok-ssl' },
+    handler: (req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(html);
+    },
+  });
+  try {
+    const res = await ctx.get('/signalk/page');
+    assert.equal(res.status, 200);
+    assert.match(res.body, /window\.SK_TOKEN="tok-ssl"/);
+    assert.equal(ctx.backend.requests.length, 1);
+    assert.equal(ctx.backend.requests[0].headers.authorization, 'Bearer tok-ssl');
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+sslTest('with Signal K on SSL, a redirect to its SSL address stays on the proxy', async () => {
+  const ctx = await setupSsl({
+    handler: (req, res) => {
+      res.writeHead(302, { 'location': `https://127.0.0.1:${req.socket.localPort}/signalk/after`, 'content-type': 'text/plain' });
+      res.end();
+    },
+  });
+  try {
+    const res = await ctx.get('/signalk/go');
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, `http://127.0.0.1:${ctx.proxyPort}/signalk/after`);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+sslTest('with Signal K on SSL, the WebSocket is tunnelled over HTTPS', async () => {
+  const ctx = await setupSsl({
+    options: { skToken: 'tok-ws' },
+    onUpgrade: (req, socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n',
+      );
+      socket.write('hello');
+      socket.on('data', (d) => socket.write('echo:' + d));
+      ctx.upgradeUrl = req.url;
+    },
+  });
+  try {
+    const got = await new Promise((resolve, reject) => {
+      const req = http.request({
+        host: '127.0.0.1',
+        port: ctx.proxyPort,
+        path: '/signalk/v1/stream',
+        headers: { Connection: 'Upgrade', Upgrade: 'websocket' },
+      });
+      const timer = setTimeout(() => reject(new Error('no WS upgrade through the proxy')), 3000);
+      req.on('upgrade', (res, socket, head) => {
+        let data = head ? head.toString() : '';
+        socket.on('data', (d) => {
+          data += d;
+          if (data.includes('echo:ping')) {
+            clearTimeout(timer);
+            socket.destroy();
+            resolve({ status: res.statusCode, data });
+          }
+        });
+        socket.write('ping');
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(got.status, 101);
+    assert.match(got.data, /hello/);
+    assert.match(ctx.upgradeUrl, /token=tok-ws/);
+  } finally {
+    await ctx.cleanup();
+  }
+});

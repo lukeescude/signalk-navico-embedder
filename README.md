@@ -31,7 +31,7 @@ configurator that replaces the generic settings form:
    - **Launcher** — announce a single tile that opens the [app-chooser webapp](#app-chooser-webapp), from which all enabled apps can be launched. Keeps the MFD's tile list uncluttered when you have many apps.
 2. **Local IP address override** — leave blank to auto-detect. Set this if the machine has multiple network interfaces and the wrong one is selected.
 3. **Proxy port** — the HTTP port this proxy listens on (default: `8080`).
-4. **Signal K server port** — leave blank to auto-detect (`PORT` env var, then the server's configured port, then `3000`). Set this only if the proxy cannot reach the Signal K server on the detected port.
+4. **Signal K server port** — leave blank to auto-detect (`PORT` env var, then the server's configured port, then `3000`). Set this only if the proxy cannot reach the Signal K server on the detected port. With **Use SSL** on in Signal K, the proxy talks HTTPS to Signal K's SSL port instead (`SSLPORT` env var, then the server's configured SSL port, then `3443`, or this override) and still serves the MFD plain HTTP, which is all the MFD can use.
 5. **Signal K authentication token** — see [Authentication](#authentication) below.
 6. **Client IP whitelist** — restrict which clients may connect to the proxy. See [Client IP whitelist](#client-ip-whitelist) below.
 7. **Auto-discovery** — the panel scans the Signal K server for installed web apps as soon as it opens (shown with a spinner) and adds any new ones to the list below, starting **disabled** so you opt in explicitly. There's no manual discover button; it re-scans automatically every time you open the panel.
