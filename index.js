@@ -243,6 +243,16 @@ function getServerPort(app, options) {
   );
 }
 
+// The local Signal K server's SSL port, in the server's own resolution order:
+// SSLPORT env var, then settings.sslport, then the 3443 default.
+function getSslPort(app) {
+  return (
+    Number(process.env.SSLPORT)
+    || (app.config && app.config.settings && app.config.settings.sslport)
+    || 3443
+  );
+}
+
 // Where the proxy reaches the local Signal K server. With "Use SSL" on, Signal K
 // serves on its SSL port and its HTTP port only redirects to
 // https://127.0.0.1:<sslport>/... — a redirect the MFD cannot follow (127.0.0.1
@@ -253,9 +263,9 @@ function getServerTarget(app, options) {
   const settings = (app.config && app.config.settings) || {};
   const protocol = settings.ssl === true ? 'https' : 'http';
   const port = protocol === 'https'
-    ? (options && options.serverPort) || Number(process.env.SSLPORT) || settings.sslport || 3443
+    ? (options && options.serverPort) || getSslPort(app)
     : getServerPort(app, options);
-  return { protocol, port };
+  return { protocol, port: Number(port) };
 }
 
 // A redirect from Signal K to one of its own local addresses (its HTTP or SSL
@@ -550,8 +560,7 @@ module.exports = function (app) {
       // is slow on a small GX.
       upstreamAgent = target.protocol === 'https' ? new https.Agent({ keepAlive: true, ...upstreamTls }) : null;
       const upstreamPage = upstreamAgent ? { agent: upstreamAgent } : {};
-      const settings = (app.config && app.config.settings) || {};
-      const localPorts = [...new Set([serverPort, getServerPort(app, {}), Number(process.env.SSLPORT) || settings.sslport || 3443].map(Number))];
+      const localPorts = [...new Set([serverPort, getServerPort(app, {}), getSslPort(app)].map(Number))];
       const skToken = (options.skToken || '').trim();
 
       const serverUrl = `http://${ip}:${port}`;
@@ -661,7 +670,7 @@ module.exports = function (app) {
 
         const reqOptions = {
           hostname: targetParsed.hostname,
-          port: parseInt(targetParsed.port) || 80,
+          port: serverPort, // not targetParsed.port: URL drops a default port (443 / 80) to ""
           path: req.url,
           method: req.method,
           headers: forwardHeaders,
@@ -783,7 +792,7 @@ module.exports = function (app) {
 
         const proxyReq = upstream.request({
           hostname: targetParsed.hostname,
-          port: parseInt(targetParsed.port) || 80,
+          port: serverPort, // not targetParsed.port: URL drops a default port (443 / 80) to ""
           path: wsPath,
           headers: wsHeaders,
           ...upstreamTls,

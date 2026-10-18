@@ -823,3 +823,30 @@ sslTest('with Signal K on SSL, the WebSocket is tunnelled over HTTPS', async () 
     await ctx.cleanup();
   }
 });
+
+test('with Signal K on SSL port 443, the proxy connects to 443 (not 80)', async () => {
+  // new URL('https://127.0.0.1:443').port is "" — the proxy must not fall back
+  // to 80 from it. Capture the upstream request options rather than bind 443.
+  const proxyPort = await freePort();
+  const app = mockApp();
+  app.config.settings = { ssl: true, sslport: 443, port: 1 };
+  const p = plugin(app);
+  const dg = fakeDgram();
+  const realRequest = https.request;
+  const seen = [];
+  https.request = (opts, cb) => {
+    seen.push(opts);
+    return realRequest({ ...opts, port: 1 }, cb);
+  };
+  try {
+    p.start({ ip: '127.0.0.1', port: proxyPort, apps: [] });
+    await waitForProxy(proxyPort);
+    await httpGet(proxyPort, '/signalk/x');
+    assert.ok(seen.length >= 1);
+    assert.equal(seen[0].port, 443);
+  } finally {
+    https.request = realRequest;
+    p.stop();
+    dg.restore();
+  }
+});
