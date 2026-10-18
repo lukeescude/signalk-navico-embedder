@@ -748,6 +748,22 @@ sslTest('with Signal K on SSL, pages are fetched over HTTPS and served to the MF
   }
 });
 
+sslTest('with Signal K on SSL, one TLS connection is reused for several requests', async () => {
+  const ctx = await setupSsl();
+  let handshakes = 0;
+  ctx.backend.server.on('secureConnection', () => handshakes++);
+  try {
+    for (let i = 0; i < 4; i++) {
+      const res = await ctx.get(`/signalk/r${i}`);
+      assert.equal(res.status, 200);
+    }
+    assert.equal(ctx.backend.requests.length, 4);
+    assert.equal(handshakes, 1);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 sslTest('with Signal K on SSL, a redirect to its SSL address stays on the proxy', async () => {
   const ctx = await setupSsl({
     handler: (req, res) => {

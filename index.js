@@ -449,6 +449,7 @@ function isClientAllowed(remoteAddr, whitelist) {
 module.exports = function (app) {
   let server = null;
   let publishInterval = null;
+  let upstreamAgent = null; // keep-alive HTTPS agent to Signal K when it runs SSL
 
   return {
     id: 'signalk-navico-embedder',
@@ -544,6 +545,11 @@ module.exports = function (app) {
       // Signal K's certificate is issued for its hostname, not 127.0.0.1, and the
       // connection never leaves this machine, so it is not verified.
       const upstreamTls = target.protocol === 'https' ? { rejectUnauthorized: false } : {};
+      // Keep TLS connections to Signal K open between requests: a page load and
+      // every button press would otherwise each pay a fresh TLS handshake, which
+      // is slow on a small GX.
+      upstreamAgent = target.protocol === 'https' ? new https.Agent({ keepAlive: true, ...upstreamTls }) : null;
+      const upstreamPage = upstreamAgent ? { agent: upstreamAgent } : {};
       const settings = (app.config && app.config.settings) || {};
       const localPorts = [...new Set([serverPort, getServerPort(app, {}), Number(process.env.SSLPORT) || settings.sslport || 3443].map(Number))];
       const skToken = (options.skToken || '').trim();
@@ -649,6 +655,9 @@ module.exports = function (app) {
         }
         forwardHeaders.host = targetParsed.host;
         if (skToken) forwardHeaders['authorization'] = 'Bearer ' + skToken;
+        // Connection is hop-by-hop: the MFD's "close" must not end the kept-alive
+        // TLS connection to Signal K.
+        if (upstreamAgent) delete forwardHeaders.connection;
 
         const reqOptions = {
           hostname: targetParsed.hostname,
@@ -656,7 +665,7 @@ module.exports = function (app) {
           path: req.url,
           method: req.method,
           headers: forwardHeaders,
-          ...upstreamTls,
+          ...upstreamPage,
         };
 
         const proxyReq = upstream.request(reqOptions, (proxyRes) => {
@@ -876,6 +885,10 @@ module.exports = function (app) {
     },
 
     stop() {
+      if (upstreamAgent) {
+        upstreamAgent.destroy();
+        upstreamAgent = null;
+      }
       if (publishInterval) {
         clearInterval(publishInterval);
         publishInterval = null;
