@@ -62,6 +62,48 @@ test('buildAllowedPrefixes always includes /signalk and the launcher, plus enabl
   ]);
 });
 
+test('buildAllowedPrefixes adds /plugins/<id> for each extra plugin path', () => {
+  const { buildAllowedPrefixes } = plugin.internal;
+  const fixed = ['/signalk', '/skServer/loginStatus', '/signalk-navico-embedder'];
+
+  // A plugin id and a full /plugins/<id> path both give the same prefix, whitespace and
+  // a trailing slash are ignored, and duplicates collapse.
+  assert.deepEqual(buildAllowedPrefixes([], ['sailsconfiguration', ' /plugins/race-control/ ', 'sailsconfiguration']), [
+    ...fixed,
+    '/plugins/sailsconfiguration',
+    '/plugins/race-control',
+  ]);
+
+  // Scoped ids keep their slash.
+  assert.deepEqual(buildAllowedPrefixes([], ['@scope/name']), [...fixed, '/plugins/@scope/name']);
+
+  // They add to, not replace, what the enabled apps already contribute.
+  assert.deepEqual(buildAllowedPrefixes([{ url: '/@signalk/sailsconfiguration' }], ['sailsconfiguration']), [
+    ...fixed,
+    '/@signalk/sailsconfiguration',
+    '/plugins/@signalk/sailsconfiguration',
+    '/plugins/sailsconfiguration',
+  ]);
+
+  // Absent, blank, non-string and bare /plugins entries are dropped. A bare /plugins
+  // prefix would forward every plugin, so it must never get into the allowlist.
+  assert.deepEqual(buildAllowedPrefixes([], undefined), fixed);
+  assert.deepEqual(buildAllowedPrefixes([], ['', '   ', '/', '/plugins', 'plugins', '/plugins/', null, 42, {}]), fixed);
+});
+
+test('an extra plugin path allows that plugin only, not its siblings', () => {
+  const { buildAllowedPrefixes, isPathAllowed } = plugin.internal;
+  const prefixes = buildAllowedPrefixes([], ['sailsconfiguration']);
+
+  assert.equal(isPathAllowed('/plugins/sailsconfiguration/sails/main/active', prefixes), true);
+  assert.equal(isPathAllowed('/plugins/sailsconfiguration', prefixes), true);
+  assert.equal(isPathAllowed('/plugins/race-control/races', prefixes), false);
+  assert.equal(isPathAllowed('/plugins/sailsconfigurationx', prefixes), false);
+  assert.equal(isPathAllowed('/plugins', prefixes), false);
+  // Traversal out of the allowed plugin is still resolved before matching.
+  assert.equal(isPathAllowed('/plugins/sailsconfiguration/../race-control/races', prefixes), false);
+});
+
 test('isPathAllowed matches by path segment, not string prefix', () => {
   const { isPathAllowed } = plugin.internal;
   const prefixes = ['/signalk', '/signalk-navico-embedder', '/admin'];
@@ -177,6 +219,9 @@ test('the config schema declares the documented options', () => {
   assert.equal(props.ipWhitelist.type, 'array');
   assert.equal(props.ipWhitelist.items.type, 'string');
   assert.deepEqual(props.ipWhitelist.default, []);
+  assert.equal(props.extraPluginPaths.type, 'array');
+  assert.equal(props.extraPluginPaths.items.type, 'string');
+  assert.deepEqual(props.extraPluginPaths.default, []);
   assert.equal(props.apps.type, 'array');
 });
 

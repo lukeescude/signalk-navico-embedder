@@ -34,8 +34,9 @@ configurator that replaces the generic settings form:
 4. **Signal K server port** — leave blank to auto-detect (`PORT` env var, then the server's configured port, then `3000`). Set this only if the proxy cannot reach the Signal K server on the detected port. With **Use SSL** on in Signal K, the proxy talks HTTPS to Signal K's SSL port instead (`SSLPORT` env var, then the server's configured SSL port, then `3443`, or this override) and still serves the MFD plain HTTP, which is all the MFD can use.
 5. **Signal K authentication token** — see [Authentication](#authentication) below.
 6. **Client IP whitelist** — restrict which clients may connect to the proxy. See [Client IP whitelist](#client-ip-whitelist) below.
-7. **Auto-discovery** — the panel scans the Signal K server for installed web apps as soon as it opens (shown with a spinner) and adds any new ones to the list below, starting **disabled** so you opt in explicitly. There's no manual discover button; it re-scans automatically every time you open the panel.
-8. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
+7. **Extra plugin paths** — plugin ids whose `/plugins/<id>` API the proxy should also forward, for webapps that call a plugin whose id differs from its webapp path. See [Extra plugin paths](#extra-plugin-paths) below.
+8. **Auto-discovery** — the panel scans the Signal K server for installed web apps as soon as it opens (shown with a spinner) and adds any new ones to the list below, starting **disabled** so you opt in explicitly. There's no manual discover button; it re-scans automatically every time you open the panel.
+9. **MFD Apps** — the apps that become tiles on the MFD. For each entry you can:
    - drag to reorder,
    - edit the **name** and **description** shown on the tile,
    - toggle the **Enabled** checkbox (disabled apps are kept in the list but not announced).
@@ -104,11 +105,20 @@ This means the token only needs to be stored once (in the plugin config) and wor
 
 Because the proxy injects the token into every upstream request, it will only forward a restricted set of paths — otherwise anything on the network that could reach the proxy port would have an authenticated gateway to the entire Signal K server. The proxy forwards:
 
-- **Each enabled app's path** (and everything beneath it, so the app's own assets load). Disabling an app in the config removes its path from the allowlist.
+- **Each enabled app's path** (and everything beneath it, so the app's own assets load), and its `/plugins/<app path>`, where a webapp that ships a plugin reaches that plugin's API. Disabling an app in the config removes both from the allowlist.
+- **Extra plugin paths** you list — see [Extra plugin paths](#extra-plugin-paths).
 - **`/signalk`** — all Signal K REST APIs and the WebSocket stream live here, so every proxied app needs it.
 - **`/signalk-navico-embedder/`** — this plugin's own app-chooser page (the tile announced in launcher mode).
 
 Everything else returns `403 Forbidden`. Notably the Signal K admin UI (`/admin`) is only reachable through the proxy if you enable the auto-discovered **SignalK Admin** app — so exposing it on the MFD is a deliberate, visible choice.
+
+### Extra plugin paths
+
+A webapp that ships a Signal K plugin calls that plugin's API under `/plugins/<plugin id>`. The proxy forwards `/plugins/<app path>` for each enabled app, which is only right when the plugin id equals the webapp path. They often differ: the webapp `@signalk/sailsconfiguration` ships the plugin `sailsconfiguration`, so a webapp that calls `/plugins/sailsconfiguration/...` gets `403 Forbidden` from the proxy.
+
+Add the plugin id (e.g. `sailsconfiguration`) to **Extra plugin paths** in the config panel and the proxy also forwards `/plugins/sailsconfiguration` and everything beneath it. The id is the `id` that `GET /plugins` lists for the plugin on your Signal K server. A full `/plugins/<id>` path works too. Entries match exactly: nothing else under `/plugins` is opened, and a blank entry or a bare `/plugins` is ignored.
+
+These requests carry the injected token, so what a client can do there is whatever the token's access level allows on that plugin. Recent Signal K 2.x servers treat a plugin route as admin-only unless the plugin opened it to `readonly` or `readwrite` users, so with a `readwrite` token a listed plugin exposes only the routes it explicitly opened. List only plugins whose routes you are happy for every client of the proxy to call, and consider the [Client IP whitelist](#client-ip-whitelist).
 
 ## Client IP whitelist
 

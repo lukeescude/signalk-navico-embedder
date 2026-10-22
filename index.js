@@ -385,12 +385,26 @@ function toPrefix(p) {
   return withSlash.replace(/\/+$/, '');
 }
 
+// Normalize a configured plugin id (or a full /plugins/<id> path) to the allowlist
+// prefix /plugins/<id>. 'sailsconfiguration' and '/plugins/sailsconfiguration/' both
+// give '/plugins/sailsconfiguration'. Returns '' for a blank entry or for just
+// '/plugins': as a prefix that would forward every plugin's routes, so it must never
+// get into the allowlist by accident.
+function toPluginPrefix(entry) {
+  const prefix = toPrefix(typeof entry === 'string' ? entry.trim() : '');
+  if (!prefix || prefix === '/plugins') return '';
+  return prefix.startsWith('/plugins/') ? prefix : `/plugins${prefix}`;
+}
+
 // The set of path prefixes the proxy will forward: the always-allowed fixed paths
 // plus, per enabled app, both the app's own path and its plugin path. Webapps that
 // ship a server plugin fetch their config/API under /plugins/<app path> (e.g. an
 // app at /@signalk/freeboard-sk calls /plugins/@signalk/freeboard-sk), so that has
-// to be allowed too. Anything outside this list is refused.
-function buildAllowedPrefixes(enabledApps) {
+// to be allowed too. That only works when the plugin's id equals its webapp path;
+// a webapp that calls another plugin (or one whose id differs) needs that plugin
+// listed in extraPluginPaths, which adds /plugins/<id> for each entry. Anything
+// outside this list is refused.
+function buildAllowedPrefixes(enabledApps, extraPluginPaths) {
   const prefixes = new Set(ALWAYS_ALLOWED_PREFIXES);
   for (const a of enabledApps || []) {
     const prefix = toPrefix(a && a.url);
@@ -398,6 +412,10 @@ function buildAllowedPrefixes(enabledApps) {
       prefixes.add(prefix);
       prefixes.add(`/plugins${prefix}`);
     }
+  }
+  for (const entry of extraPluginPaths || []) {
+    const prefix = toPluginPrefix(entry);
+    if (prefix) prefixes.add(prefix);
   }
   return [...prefixes];
 }
@@ -518,6 +536,21 @@ module.exports = function (app) {
             title: 'IPv4 address',
           },
         },
+        extraPluginPaths: {
+          type: 'array',
+          title: 'Extra plugin paths',
+          description:
+            'Plugin ids whose /plugins/<id> API the proxy should also forward. Each enabled app already gets '
+            + '/plugins/<app path>, which is enough only when the plugin\'s id equals its webapp path. Add the '
+            + 'plugin id (e.g. sailsconfiguration) when a webapp calls the API of a plugin with a different id. '
+            + 'Everything else under /plugins stays blocked. The auth token is added to these requests, so list '
+            + 'only plugins you trust the clients of this proxy to use.',
+          default: [],
+          items: {
+            type: 'string',
+            title: 'Plugin id',
+          },
+        },
         apps: {
           type: 'array',
           title: 'MFD Apps',
@@ -571,10 +604,11 @@ module.exports = function (app) {
       // both derived from the saved options — see buildAppModel.
       const { mode, enabledApps, apps, webapps } = buildAppModel(options, ip, port);
 
-      // Restrict what the proxy will forward to the enabled apps, /signalk, and this
-      // plugin's own launcher page — see ALWAYS_ALLOWED_PREFIXES. Without this the
-      // token-injecting proxy is an open, authenticated gateway to the whole server.
-      const allowedPrefixes = buildAllowedPrefixes(enabledApps);
+      // Restrict what the proxy will forward to the enabled apps, /signalk, this
+      // plugin's own launcher page and any configured extra plugins — see
+      // ALWAYS_ALLOWED_PREFIXES. Without this the token-injecting proxy is an open,
+      // authenticated gateway to the whole server.
+      const allowedPrefixes = buildAllowedPrefixes(enabledApps, options.extraPluginPaths);
       app.debug(`Proxy path allowlist: ${allowedPrefixes.join(', ')}`);
 
       // Restrict which clients may connect. An empty list allows anyone (the

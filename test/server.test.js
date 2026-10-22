@@ -366,6 +366,44 @@ test('a disabled app is not proxied', async () => {
   }
 });
 
+test('forwards /plugins/<id> only for a configured extra plugin path', async () => {
+  const ctx = await setup({
+    options: {
+      skToken: 'tok-extra',
+      apps: [{ enabled: true, url: '/@signalk/sailsconfiguration/' }],
+      extraPluginPaths: ['sailsconfiguration'],
+    },
+  });
+  try {
+    // The plugin id differs from the webapp path, so only the extra path covers it.
+    const allowed = await ctx.get('/plugins/sailsconfiguration/sails/main/active');
+    assert.equal(allowed.status, 200);
+    assert.equal(ctx.backend.requests.length, 1);
+    assert.equal(ctx.backend.requests[0].url, '/plugins/sailsconfiguration/sails/main/active');
+    assert.equal(ctx.backend.requests[0].headers.authorization, 'Bearer tok-extra');
+
+    // A different plugin is still refused without reaching the backend.
+    const blocked = await ctx.get('/plugins/race-control/races');
+    assert.equal(blocked.status, 403);
+    assert.equal(ctx.backend.requests.length, 1, 'blocked request never reached the backend');
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('without extraPluginPaths a plugin whose id differs from its webapp path is refused', async () => {
+  const ctx = await setup({
+    options: { apps: [{ enabled: true, url: '/@signalk/sailsconfiguration/' }] },
+  });
+  try {
+    const res = await ctx.get('/plugins/sailsconfiguration/sails/main/active');
+    assert.equal(res.status, 403);
+    assert.equal(ctx.backend.requests.length, 0);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test('always allows /signalk and the launcher page', async () => {
   const ctx = await setup();
   try {

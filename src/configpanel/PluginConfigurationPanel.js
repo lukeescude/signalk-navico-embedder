@@ -252,6 +252,7 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   const [skAuthLevel, setSkAuthLevel] = useState('readwrite')
   const [apps, setApps] = useState(() => cfg.apps || [])
   const [ipWhitelist, setIpWhitelist] = useState(() => cfg.ipWhitelist || [])
+  const [extraPluginPaths, setExtraPluginPaths] = useState(() => cfg.extraPluginPaths || [])
 
   const [status, setStatus] = useState('')
   const [statusError, setStatusError] = useState(false)
@@ -357,9 +358,11 @@ export default function PluginConfigurationPanel({ configuration, save }) {
       // Trim and drop blank rows so an empty input can't make the list look
       // "active"; buildIpWhitelist canonicalizes/validates again on load.
       ipWhitelist: ipWhitelist.map((s) => s.trim()).filter(Boolean),
+      // Same for plugin ids; buildAllowedPrefixes normalizes them again on load.
+      extraPluginPaths: extraPluginPaths.map((s) => s.trim()).filter(Boolean),
       apps: appsList
     }),
-    [mode, ip, port, serverPort, skToken, ipWhitelist]
+    [mode, ip, port, serverPort, skToken, ipWhitelist, extraPluginPaths]
   )
 
   const doSave = useCallback(async () => {
@@ -487,6 +490,10 @@ export default function PluginConfigurationPanel({ configuration, save }) {
   const addIp = () => setIpWhitelist([...ipWhitelist, ''])
   const updateIp = (i, val) => setIpWhitelist(ipWhitelist.map((ip, j) => (j === i ? val : ip)))
   const removeIp = (i) => setIpWhitelist(ipWhitelist.filter((_, j) => j !== i))
+
+  const addPluginPath = () => setExtraPluginPaths([...extraPluginPaths, ''])
+  const updatePluginPath = (i, val) => setExtraPluginPaths(extraPluginPaths.map((p, j) => (j === i ? val : p)))
+  const removePluginPath = (i) => setExtraPluginPaths(extraPluginPaths.filter((_, j) => j !== i))
 
   const onDragStart = (list, index, globalIdx) => setDrag({ list, index, globalIdx })
   const onDragEnd = () => {
@@ -735,6 +742,38 @@ export default function PluginConfigurationPanel({ configuration, save }) {
       <div style={{ marginTop: 8 }}>
         <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addIp}>
           + Add IP address
+        </button>
+      </div>
+
+      <div style={S.sectionTitle}>Extra Plugin Paths</div>
+      <div style={{ ...S.hint, marginBottom: 10 }}>
+        Each enabled app can already reach /plugins/&lt;app path&gt;, which only works when the plugin&apos;s id
+        equals its webapp path. If a webapp calls the API of a plugin with a different id, add that plugin&apos;s
+        id here (e.g. sailsconfiguration) and the proxy also forwards /plugins/&lt;id&gt;. Everything else under
+        /plugins stays blocked. The auth token is added to these requests, so only list plugins you trust the
+        clients of this proxy to use.
+      </div>
+      {extraPluginPaths.length === 0 ? (
+        <div style={{ ...S.status, color: '#888' }}>None — only each enabled app&apos;s own plugin path is forwarded.</div>
+      ) : (
+        extraPluginPaths.map((pluginId, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+            <input
+              style={S.appInput}
+              type="text"
+              value={pluginId}
+              placeholder="e.g. sailsconfiguration"
+              onChange={(e) => updatePluginPath(i, e.target.value)}
+            />
+            <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => removePluginPath(i)}>
+              Remove
+            </button>
+          </div>
+        ))
+      )}
+      <div style={{ marginTop: 8 }}>
+        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addPluginPath}>
+          + Add plugin id
         </button>
       </div>
 
